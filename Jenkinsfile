@@ -353,16 +353,16 @@ pipeline {
                     
                     def releaseTag = "v1.0.${env.APP_VERSION}"
                     def k8sManifestPath = "k8s" // Directory containing your YAML files
-                    def kubeconfigCredentialsId = 'kubeconfig-credentials' // The ID you set in Jenkins Credentials
+                    //// def kubeconfigCredentialsId = 'kubeconfig-credentials' // The ID you set in Jenkins Credentials
 
                     // Use withCredentials to securely access the kubeconfig file
-                    withCredentials([file(credentialsId: kubeconfigCredentialsId, variable: 'KUBECONFIG_FILE_PATH')]) {
+                    //// withCredentials([file(credentialsId: kubeconfigCredentialsId, variable: 'KUBECONFIG_FILE_PATH')]) {
                         // KUBECONFIG_FILE_PATH is now a temporary path to your kubeconfig file.
                         // We'll set the KUBECONFIG environment variable for the shell commands.
-                        env.KUBECONFIG = KUBECONFIG_FILE_PATH
+                        //// env.KUBECONFIG = KUBECONFIG_FILE_PATH
 
-                        echo "INFO: Using Kubeconfig: ${env.KUBECONFIG}"
-                        echo "INFO: Applying Kubernetes manifests from '${k8sManifestPath}' directory..."
+                        //// echo "INFO: Using Kubeconfig: ${env.KUBECONFIG}"
+                        //// echo "INFO: Applying Kubernetes manifests from '${k8sManifestPath}' directory..."
 
                         // The sed commands to update image tags in your YAML files should also be within this
                         // withCredentials block if you are checking out fresh each time or need to ensure
@@ -374,6 +374,7 @@ pipeline {
                         def apacheImageBaseName= env.APACHE_APP_IMAGE_BASE_NAME
 
                         sh """
+                            kubectl cluster-info
                             echo "INFO: Updating image tags in Kubernetes manifests to: ${releaseTag}"
                             sed -i 's|image: ${dockerHubUser}/${mysqlImageBaseName}:.*|image: ${dockerHubUser}/${mysqlImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/mysql-prod.yaml
                             sed -i 's|image: ${dockerHubUser}/${phpImageBaseName}:.*|image: ${dockerHubUser}/${phpImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/php-prod.yaml
