@@ -8,7 +8,7 @@ FROM mysql:8.0
 
 # Copy your dump.sql file into this directory within the image.
 # The source path '../public/dump/dump.sql' is relative to the 'mysql/' build context.
-COPY ../public/dump/dump.sql /docker-entrypoint-initdb.d/dump.sql
+COPY ./public/dump/dump.sql /docker-entrypoint-initdb.d/dump.sql
 
 # You can add other customizations here if needed, like custom my.cnf files:
 # COPY custom.cnf /etc/mysql/conf.d/custom.cnf
