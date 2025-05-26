@@ -9,17 +9,20 @@ COPY apache_php.conf /usr/local/apache2/conf/apache_php.conf
 RUN echo "Include /usr/local/apache2/conf/apache_php.conf" \
     >> /usr/local/apache2/conf/httpd.conf
 
-# Set the working directory to Apache's document root
-#WORKDIR /usr/local/apache2/htdocs/
+# Create the DocumentRoot directory if it might not exist (though /var/www/html is common)
+# and ensure the Apache user ('daemon' for httpd:alpine) owns it.
+RUN mkdir -p /var/www/html/ && chown -R daemon:daemon /var/www/html/
 
-# Copy the application code from the project's public directory
-# into Apache's document root.
-# '../public' is relative to the 'apache/' build context directory.
-#COPY ../public .
-# The '.' means "copy into the current WORKDIR (/usr/local/apache2/htdocs/)"
-# Alternatively: COPY ../public /usr/local/apache2/htdocs/
+# Set the working directory to make the COPY command simpler
+WORKDIR /var/www/html/
 
-# Ensure correct permissions if Apache needs to write or if specific ownership is required
-# RUN chown -R <user>:<group> /usr/local/apache2/htdocs/
+# Copy the application code from your project's php/public directory
+# into Apache's document root (/var/www/html/).
+# The path '../php/public' is relative to the 'apache/' build context directory.
+COPY ../public .
+# The '.' means "copy everything from ../php/public into the current WORKDIR (/var/www/html/)"
 
-# (The default CMD for httpd image will usually start Apache)
+# Ensure the copied files are also owned by the Apache user
+RUN chown -R daemon:daemon /var/www/html/
+
+# The default CMD for the httpd image will usually start Apache.
