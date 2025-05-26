@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: php-fpm-service # Apache will connect to this service name (matches apache_php.conf)
+  namespace: s753-production
+  labels:
+    app: s753-php
+    environment: production
+spec:
+  ports:
+    - port: 9000
+      name: php-fpm
+  selector:
+    app: s753-php
+    environment: production
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: s753-php-prod-deployment
+  namespace: s753-production
+  labels:
+    app: s753-php
+    environment: production
+spec:
+  replicas: 1 # You can scale this
+  selector:
+    matchLabels:
+      app: s753-php
+      environment: production
+  template:
+    metadata:
+      labels:
+        app: s753-php
+        environment: production
+    spec:
+      containers:
+        - name: php-fpm
+          image: docker1010/s753-t73-php:v1.0.35
+          ports:
+            - containerPort: 9000
+              name: php-fpm
+          env:
+            - name: DB_HOSTNAME
+              value: "mysql-prod-svc" # Points to the MySQL K8s Service name
+            - name: DB_USERNAME
+              value: "prod_admin"      # As per Jenkinsfile PROD_DB_USERNAME
+            - name: DB_PASSWORD
+              value: "prod_secure_password" # Use K8s Secrets
+            - name: DB_NAME
+              value: "mydb_production" # As per Jenkinsfile PROD_DB_NAME
+            # Add any other environment variables your PHP application might need
+            # - name: APP_ENV
+            #   value: "production"

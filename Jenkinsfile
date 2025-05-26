@@ -1,52 +1,67 @@
 // Jenkinsfile (Declarative Pipeline)
 
 pipeline {
-    agent any // Or specify a particular agent if needed (e.g., one with Docker)
+    agent any
 
     environment {
-        // Define common environment variables here
-        // Replace 'yourdockerhubusername' accordingly
-        LOCAL_IMAGE_REPO    = "localhost"
-        PHP_IMAGE           = "s753-t73-php"
-        APACHE_IMAGE        = "s753-t73-apache"
-        MYSQL_IMAGE         = "s753-t73-mysql"
-        PHP_IMAGE_PREFIX    = "${LOCAL_IMAGE_REPO}/${PHP_IMAGE}"
-        APACHE_IMAGE_PREFIX = "${LOCAL_IMAGE_REPO}/${APACHE_IMAGE}"
-        MYSQL_IMAGE_PREFIX  = "${LOCAL_IMAGE_REPO}/${MYSQL_IMAGE}"
-        APP_VERSION         = "${env.BUILD_NUMBER ?: 'latest'}" // Use Jenkins build number
-
-        // For Deploy Stage
-        TEST_NETWORK_NAME    = "s753-test-network"
-        MYSQL_CONTAINER_NAME = "s753-test-mysql"
-        PHP_CONTAINER_NAME   = "s753-test-php"
-        APACHE_CONTAINER_NAME= "s753-test-apache"
-        APACHE_EXPOSED_PORT  = "8080"
-        DB_ROOT_PASSWORD     = "password"
-        DB_DATABASE          = "mydb"
-        DB_USER              = "admin"
-        DB_PASSWORD          = "password"
-
-        // For Test Stage
-        APP_URL              = "http://localhost:${APACHE_EXPOSED_PORT}"
-        INDEX_PAGE_URL       = "${APP_URL}/index.php"
-        EXPECTED_TEXT        = "Login Page of ABC Portal"
-
-        // For Code Quality Stage
-        SONAR_SERVER         = "10.119.10.137"
-        SONAR_EXPOSED_PORT   = "9002"
-        SONAR_HOST_URL_ENV   = "http://${SONAR_SERVER}:${SONAR_EXPOSED_PORT}"
-        SONAR_TOKEN_ENV      = "sqa_1bff1a3237a77b40451a377f0f59c30443dcadc7"
-
-        // For release stage
-        DOCKERHUB_USER       = "docker1010"
+        // --- General Build Vars ---
+        LOCAL_IMAGE_REPO           = "localhost"
+        PHP_APP_IMAGE_BASE_NAME    = "s753-t73-php"
+        APACHE_APP_IMAGE_BASE_NAME = "s753-t73-apache"
+        MYSQL_APP_IMAGE_BASE_NAME  = "s753-t73-mysql"
         
+        PHP_IMAGE_PREFIX           = "${LOCAL_IMAGE_REPO}/${PHP_APP_IMAGE_BASE_NAME}"
+        APACHE_IMAGE_PREFIX        = "${LOCAL_IMAGE_REPO}/${APACHE_APP_IMAGE_BASE_NAME}"
+        MYSQL_IMAGE_PREFIX         = "${LOCAL_IMAGE_REPO}/${MYSQL_APP_IMAGE_BASE_NAME}"
+        APP_VERSION                = "${env.BUILD_NUMBER ?: 'latest'}"
+
+        // --- Test Environment Docker Vars ---
+        TEST_NETWORK_NAME          = "s753-test-network"
+        TEST_MYSQL_CONTAINER_NAME  = "s753-test-mysql"         // Specific MySQL container name for test
+        TEST_PHP_FPM_SERVICE_NAME  = "php-fpm-service"         // Generic name PHP container will take in test, matches Apache conf
+        TEST_APACHE_CONTAINER_NAME = "s753-test-apache"
+        TEST_APACHE_EXPOSED_PORT   = "8080"
+        // DB Connection Vars for Test PHP Container
+        TEST_DB_HOSTNAME           = TEST_MYSQL_CONTAINER_NAME // PHP in test connects to this
+        TEST_DB_USERNAME           = "admin"
+        TEST_DB_PASSWORD           = "password"
+        TEST_DB_NAME               = "mydb"
+
+        // --- Production Environment K8s (Minikube) Vars ---
+        PROD_K8S_NAMESPACE         = "s753-production"        // Optional: Deploy to a specific K8s namespace
+        PROD_MYSQL_K8S_SVC_NAME    = "mysql-prod-svc"         // K8s Service name for MySQL in Prod
+        PROD_PHP_FPM_K8S_SVC_NAME  = "php-fpm-service"        // K8s Service name for PHP in Prod (matches Apache conf)
+        PROD_APACHE_K8S_SVC_NAME   = "s753-apache-prod-svc"
+        PROD_APACHE_NODE_PORT      = "30080"                  // Example NodePort for K8s Apache service
+        // DB Connection Vars for Production PHP Pods (via K8s Deployment env vars)
+        PROD_DB_HOSTNAME           = PROD_MYSQL_K8S_SVC_NAME  // PHP in prod connects to this K8s service
+        PROD_DB_USERNAME           = "prod_admin"             // Example: use different creds for prod
+        PROD_DB_PASSWORD           = "prod_secure_password"   // Store in K8s Secrets in a real scenario!
+        PROD_DB_NAME               = "mydb_production"        // Example: different DB name for prod
+        
+        // --- Shared MySQL Root Password (for initial MySQL container setup in both envs) ---
+        DB_ROOT_PASSWORD           = "password" 
+
+        // --- Smoke Test Vars ---
+        EXPECTED_TEXT              = "Login Page of ABC Portal" // From your index.php
+
+        // --- Code Quality Stage Vars ---
+        SONAR_SERVER               = "10.119.10.137"
+        SONAR_EXPOSED_PORT         = "9002"
+        SONAR_HOST_URL_ENV         = "http://${SONAR_SERVER}:${SONAR_EXPOSED_PORT}"
+        SONAR_PROJECT_KEY          = "s753-t73" // Should match your sonar-project.properties
+        SONAR_TOKEN_ENV            = "sqa_1bff1a3237a77b40451a377f0f59c30443dcadc7"
+
+        // --- Release Stage Vars ---
+        DOCKERHUB_USER             = "docker1010"
+        DOCKERHUB_CREDENTIALS_ID   = "dockerhub-credentials" // Jenkins Credential ID
     }
 
     stages {
         stage('Checkout') {
             steps {
                 echo "INFO: Checking out code..."
-                checkout scm // Checks out code from the SCM configured in the Jenkins job
+                checkout scm
                 echo "INFO: Code checkout complete."
             }
         }
@@ -55,50 +70,49 @@ pipeline {
             steps {
                 script {
                     echo "-------------------------------------------------------------------"
-                    echo "INFO: Starting Build Stage (using direct docker build commands)"
+                    echo "INFO: Starting Build Stage"
                     echo "INFO: Jenkins Workspace: ${env.WORKSPACE}"
-                    echo "INFO: Jenkins Build Number: ${env.BUILD_NUMBER}"
-                    echo "-------------------------------------------------------------------"
-                    echo "INFO: Docker App Version for tagging will be: ${APP_VERSION}"
-                    // You can copy the content of your existing "Build Stage" shell script here
-                    // Ensure image names use the environment variables defined above
-                    def phpImageFullName    = "${PHP_IMAGE_PREFIX}:${APP_VERSION}"
-                    def apacheImageFullName = "${APACHE_IMAGE_PREFIX}:${APP_VERSION}"
-                    def mysqlImageFullName  = "${MYSQL_IMAGE_PREFIX}:${APP_VERSION}"
-                    
+                    echo "INFO: App Version for tagging will be: ${APP_VERSION}"
+
+                    def phpImageFullName    = "${env.PHP_IMAGE_PREFIX}:${env.APP_VERSION}"
+                    def apacheImageFullName = "${env.APACHE_IMAGE_PREFIX}:${env.APP_VERSION}"
+                    def mysqlImageFullName  = "${env.MYSQL_IMAGE_PREFIX}:${env.APP_VERSION}"
                     boolean buildSuccess = true
 
                     echo "INFO: Building PHP image: ${phpImageFullName}..."
                     try {
-                        sh "(docker build -t \"${phpImageFullName}\" -f php/Dockerfile .)"
+                        // IMPORTANT: Your php/Dockerfile COPY command needs to be relative to project root,
+                        // e.g., COPY php/public /var/www/html/ (since build context is '.')
+                        sh "docker build -t \"${phpImageFullName}\" -f php/Dockerfile ."
                         echo "SUCCESS: PHP Docker image built."
                     } catch (Exception e) {
                         echo "ERROR: PHP Docker image build FAILED: ${e.getMessage()}"
-                        buildSuccess = false
-                        currentBuild.result = 'FAILURE'
+                        buildSuccess = false; currentBuild.result = 'FAILURE'
                     }
 
                     if (buildSuccess) {
                         echo "INFO: Building Apache image: ${apacheImageFullName}..."
                         try {
-                            sh "(docker build -t \"${apacheImageFullName}\" -f apache/Dockerfile .)"
+                            // IMPORTANT: Your apache/Dockerfile COPY command needs to be relative to project root,
+                            // e.g., COPY php/public /var/www/html/ (if DocumentRoot is /var/www/html)
+                            // AND COPY apache/apache_php.conf /usr/local/apache2/conf/apache_php.conf
+                            sh "docker build -t \"${apacheImageFullName}\" -f apache/Dockerfile ."
                             echo "SUCCESS: Apache Docker image built."
                         } catch (Exception e) {
                             echo "ERROR: Apache Docker image build FAILED: ${e.getMessage()}"
-                            buildSuccess = false
-                            currentBuild.result = 'FAILURE'
+                            buildSuccess = false; currentBuild.result = 'FAILURE'
                         }
                     }
                     
                     if (buildSuccess) {
                         echo "INFO: Building MySQL image: ${mysqlImageFullName}..."
                         try {
+                            // This build context is 'mysql/', so COPY dump.sql in mysql/Dockerfile is fine.
                             sh "(cd mysql && docker build -t \"${mysqlImageFullName}\" .)"
                             echo "SUCCESS: MySQL Docker image built."
                         } catch (Exception e) {
                             echo "ERROR: MySQL Docker image build FAILED: ${e.getMessage()}"
-                            buildSuccess = false
-                            currentBuild.result = 'FAILURE'
+                            buildSuccess = false; currentBuild.result = 'FAILURE'
                         }
                     }
 
@@ -122,53 +136,54 @@ pipeline {
                     def apacheImageFullName = "${env.APACHE_IMAGE_PREFIX}:${env.APP_VERSION}"
                     def mysqlImageFullName  = "${env.MYSQL_IMAGE_PREFIX}:${env.APP_VERSION}"
 
-                    sh label: 'Deploy Services', script: """
-                        set -e # Exit immediately if a command exits with a non-zero status.
+                    sh label: 'Deploy Test Services', script: """
+                        set -e 
 
                         echo "INFO: Cleaning up any previous test environment..."
-                        docker stop "${env.APACHE_CONTAINER_NAME}" "${env.PHP_CONTAINER_NAME}" "${env.MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
-                        docker rm "${env.APACHE_CONTAINER_NAME}" "${env.PHP_CONTAINER_NAME}" "${env.MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
-                        echo "INFO: Removing MySQL data volume s753-db-data-test for clean user initialization..."
+                        docker stop "${env.TEST_APACHE_CONTAINER_NAME}" "${env.TEST_PHP_FPM_SERVICE_NAME}" "${env.TEST_MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
+                        docker rm "${env.TEST_APACHE_CONTAINER_NAME}" "${env.TEST_PHP_FPM_SERVICE_NAME}" "${env.TEST_MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
+                        echo "INFO: Removing TEST MySQL data volume s753-db-data-test..."
                         docker volume rm s753-db-data-test > /dev/null 2>&1 || true 
                         echo "INFO: Cleanup complete."
                         
                         echo "INFO: Creating Docker network '${env.TEST_NETWORK_NAME}'..."
-                        docker network create "${env.TEST_NETWORK_NAME}" > /dev/null 2>&1 || echo "INFO: Network '${env.TEST_NETWORK_NAME}' already exists or error creating."
+                        docker network create "${env.TEST_NETWORK_NAME}" > /dev/null 2>&1 || echo "INFO: Network '${env.TEST_NETWORK_NAME}' already exists."
 
-                        echo "INFO: Starting MySQL container ('${env.MYSQL_CONTAINER_NAME}')..."
+                        echo "INFO: Starting TEST MySQL container ('${env.TEST_MYSQL_CONTAINER_NAME}')..."
                         docker run -d \\
-                            --name "${env.MYSQL_CONTAINER_NAME}" \\
+                            --name "${env.TEST_MYSQL_CONTAINER_NAME}" \\
                             --network "${env.TEST_NETWORK_NAME}" \\
                             -e MYSQL_ROOT_PASSWORD="${env.DB_ROOT_PASSWORD}" \\
-                            -e MYSQL_DATABASE="${env.DB_DATABASE}" \\
-                            -e MYSQL_USER="${env.DB_USER}" \\
-                            -e MYSQL_PASSWORD="${env.DB_PASSWORD}" \\
+                            -e MYSQL_DATABASE="${env.TEST_DB_NAME}" \\
+                            -e MYSQL_USER="${env.TEST_DB_USERNAME}" \\
+                            -e MYSQL_PASSWORD="${env.TEST_DB_PASSWORD}" \\
                             -v "s753-db-data-test:/var/lib/mysql" \\
                             "${mysqlImageFullName}" \\
                             mysqld --default-authentication-plugin=mysql_native_password
-                        
-                        echo "INFO: MySQL container started. Waiting for it to initialize..."
+                        echo "INFO: TEST MySQL container started. Waiting..."
                         sleep 30 
 
-                        echo "INFO: Starting PHP-FPM container ('${env.PHP_CONTAINER_NAME}')..."
-                        # Ensure this command is clean and the image name is the last argument on its own line (or properly continued)
+                        echo "INFO: Starting TEST PHP-FPM container ('${env.TEST_PHP_FPM_SERVICE_NAME}')..."
                         docker run -d \\
-                            --name "${env.PHP_CONTAINER_NAME}" \\
+                            --name "${env.TEST_PHP_FPM_SERVICE_NAME}" \\
                             --network "${env.TEST_NETWORK_NAME}" \\
-                            "${phpImageFullName}"  # <-- PHP image name
-                        echo "INFO: PHP-FPM container started."
+                            -e DB_HOSTNAME="${env.TEST_DB_HOSTNAME}" \\
+                            -e DB_USERNAME="${env.TEST_DB_USERNAME}" \\
+                            -e DB_PASSWORD="${env.TEST_DB_PASSWORD}" \\
+                            -e DB_NAME="${env.TEST_DB_NAME}" \\
+                            "${phpImageFullName}"
+                        echo "INFO: TEST PHP-FPM container started."
 
-                        echo "INFO: Starting Apache container ('${env.APACHE_CONTAINER_NAME}')..."
+                        echo "INFO: Starting TEST Apache container ('${env.TEST_APACHE_CONTAINER_NAME}')..."
                         docker run -d \\
-                            --name "${env.APACHE_CONTAINER_NAME}" \\
+                            --name "${env.TEST_APACHE_CONTAINER_NAME}" \\
                             --network "${env.TEST_NETWORK_NAME}" \\
-                            -p "${env.APACHE_EXPOSED_PORT}:80" \\
-                            "${apacheImageFullName}" # <-- Apache image name
-                        echo "INFO: Apache container started."
+                            -p "${env.TEST_APACHE_EXPOSED_PORT}:80" \\
+                            "${apacheImageFullName}"
+                        echo "INFO: TEST Apache container started."
                         
                         echo "SUCCESS: Test environment deployed!"
-                        echo "Your application should be accessible on: http://localhost:${env.APACHE_EXPOSED_PORT}"
-                        echo "Services running:"
+                        echo "Test application accessible at: http://localhost:${env.TEST_APACHE_EXPOSED_PORT}"
                         docker ps --filter network="${env.TEST_NETWORK_NAME}"
                     """
                     echo "-------------------------------------------------------------------"
@@ -176,19 +191,24 @@ pipeline {
             }
         }
 
-        stage('Automated Tests (Smoke Test)') {
+        stage('Automated Tests (Smoke Test on Test Env)') {
+            environment {
+                // Make sure TEST_APACHE_EXPOSED_PORT is accessible here, it is from global env.
+                TARGET_APP_URL = "http://localhost:${env.TEST_APACHE_EXPOSED_PORT}"
+            }
             steps {
                 script {
                     echo "-------------------------------------------------------------------"
-                    echo "INFO: Starting Stage: Automated Tests (Smoke Test)"
-                    // Copy the content of your "Test Stage" (smoke test) shell script here
-                    // Use the environment variables
+                    echo "INFO: Starting Stage: Automated Tests (Smoke Test on Test Env)"
                     sh """
+                        set -e
                         EXPECTED_HTTP_CODE="200"
                         TEST_SUCCESS=true
+                        # Use the TARGET_APP_URL from the stage's environment
+                        INDEX_PAGE_URL="\${TARGET_APP_URL}/index.php" 
 
-                        echo "INFO: Test 1: Checking accessibility of ${INDEX_PAGE_URL}"
-                        HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" "${INDEX_PAGE_URL}")
+                        echo "INFO: Test 1: Checking accessibility of \${INDEX_PAGE_URL}"
+                        HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" "\${INDEX_PAGE_URL}")
 
                         if [ "\${HTTP_CODE}" -eq "\${EXPECTED_HTTP_CODE}" ]; then
                             echo "SUCCESS: Index page returned HTTP \${HTTP_CODE}."
@@ -197,22 +217,21 @@ pipeline {
                             TEST_SUCCESS=false
                         fi
 
-                        if [ "\${TEST_SUCCESS}" = true ]; then
-                            echo "INFO: Test 2: Checking content of ${INDEX_PAGE_URL} for text: '${EXPECTED_TEXT}'"
-                            if curl -s -L "${INDEX_PAGE_URL}" | grep -q "${EXPECTED_TEXT}"; then
-                                echo "SUCCESS: Expected text '${EXPECTED_TEXT}' found on the index page."
+                        if \${TEST_SUCCESS}; then
+                            echo "INFO: Test 2: Checking content of \${INDEX_PAGE_URL} for text: '${env.EXPECTED_TEXT}'"
+                            if curl -s -L "\${INDEX_PAGE_URL}" | grep -q "${env.EXPECTED_TEXT}"; then
+                                echo "SUCCESS: Expected text '${env.EXPECTED_TEXT}' found on the index page."
                             else
-                                echo "ERROR: Expected text '${EXPECTED_TEXT}' NOT found on the index page."
+                                echo "ERROR: Expected text '${env.EXPECTED_TEXT}' NOT found on the index page."
                                 TEST_SUCCESS=false
                             fi
                         fi
 
-                        if [ "\${TEST_SUCCESS}" = true ]; then
-                            echo "SUCCESS: All smoke tests passed!"
+                        if \${TEST_SUCCESS}; then
+                            echo "SUCCESS: All smoke tests passed for Test Environment!"
                         else
-                            echo "ERROR: One or more smoke tests FAILED."
-                            currentBuild.result = 'FAILURE' 
-                            error "Smoke tests failed"
+                            echo "ERROR: One or more smoke tests FAILED for Test Environment."
+                            error "Smoke tests failed for Test Environment"
                         fi
                     """
                     echo "-------------------------------------------------------------------"
@@ -220,154 +239,162 @@ pipeline {
             }
         }
         
-// Jenkinsfile
-// ... (environment block and previous stages: Checkout, Build Docker Images, Deploy, Test) ...
-
         stage('Code Quality Analysis') {
             steps {
                 script {
                     echo "-------------------------------------------------------------------"
                     echo "INFO: Starting Stage: Code Quality Analysis with SonarQube"
-                    
                     try {
-                        // Put the entire docker run command on a single line
                         sh """
-                        docker run --rm -e SONAR_HOST_URL="${env.SONAR_HOST_URL_ENV}" -e SONAR_TOKEN="${env.SONAR_TOKEN_ENV}" -v "${env.WORKSPACE}:/usr/src" sonarsource/sonar-scanner-cli
+                        docker run --rm \\
+                            -e SONAR_HOST_URL="${env.SONAR_HOST_URL_ENV}" \\
+                            -e SONAR_LOGIN="${env.SONAR_TOKEN_ENV}" \\
+                            -v "${env.WORKSPACE}:/usr/src" \\
+                            sonarsource/sonar-scanner-cli \\
+                            -Dsonar.projectKey=${env.SONAR_PROJECT_KEY} \\
+                            -Dsonar.sources=php/public \\
+                            -Dsonar.host.url=${env.SONAR_HOST_URL_ENV} \\
+                            -Dsonar.login=${env.SONAR_TOKEN_ENV}
                         """
-                        // Note: If SONAR_TOKEN_ENV is managed by Jenkins credentials, it would be injected differently,
-                        // e.g., within a withCredentials block. For now, using the environment variable as you have it.
-
-                        echo "SUCCESS: SonarQube analysis submitted. Check SonarQube dashboard."
+                        echo "SUCCESS: SonarQube analysis submitted."
                     } catch (Exception e) {
                         echo "ERROR: SonarQube analysis FAILED: ${e.getMessage()}"
-                        // Decide if you want to fail the pipeline if analysis fails
-                        currentBuild.result = 'FAILURE' // This will mark the stage/build as failed
-                        error "SonarQube analysis failed" // This will stop the pipeline
+                        currentBuild.result = 'FAILURE'; error "SonarQube analysis failed"
                     }
                     echo "-------------------------------------------------------------------"
                 }
             }
         }
 
-        // Jenkinsfile
-// ... (environment block and previous stages: Checkout, Build, Deploy, Test, Code Quality) ...
-
-        stage('Security Analysis & Approval') { // Renamed for clarity
+        stage('Security Analysis & Approval') {
             steps {
                 script {
                     echo "-------------------------------------------------------------------"
                     echo "INFO: Starting Stage: Security Analysis & Approval"
-                    echo "INFO: The SonarQube scan has completed in the previous 'Code Quality Analysis' stage."
-                    echo "INFO: Please review the SonarQube dashboard for security vulnerabilities and hotspots at:"
-                    echo "INFO: ${env.SONAR_HOST_URL_ENV}/dashboard?id=s753-t73" // Ensure s753-t73 is your sonar.projectKey
-
-                    def userInput
+                    echo "INFO: SonarQube scan completed. Review dashboard: ${env.SONAR_HOST_URL_ENV}/dashboard?id=${env.SONAR_PROJECT_KEY}"
                     try {
-                        // Pause the pipeline and wait for manual input.
-                        // The timeout prevents the pipeline from waiting indefinitely.
-                        userInput = timeout(time: 2, unit: 'HOURS') {
+                        timeout(time: 1, unit: 'HOURS') { 
                             input(
-                                id: 'securityApproval', // Optional ID for the input
-                                message: "Security Review Gate: Please check the SonarQube report at ${env.SONAR_HOST_URL_ENV}/dashboard?id=s753-t73. Do you approve to continue?",
-                                parameters: [[$class: 'BooleanParameterDefinition', defaultValue: true, description: '', name: 'Proceed with approval?']]
-                                // ok: "Proceed" // Optional: Custom text for the 'Proceed' button
-                                // submitter: 'jenkins_user_id,another_user_id', // Optional: Comma-separated list of Jenkins user IDs or group names who can approve.
-                                                                               // If omitted, anyone with Build permission on the job can approve.
-                                // submitterParameter: 'APPROVER_USER_ID' // Optional: Environment variable to store the approver's ID
+                                id: 'securityApproval', 
+                                message: "Security Review Gate: Check SonarQube (${env.SONAR_HOST_URL_ENV}/dashboard?id=${env.SONAR_PROJECT_KEY}). Approve to continue to Release?",
+                                parameters: [[$class: 'BooleanParameterDefinition', defaultValue: true, description: 'Approve release?', name: 'isApproved']]
                             )
                         }
-                        // If 'Proceed' is clicked, userInput will not be null (it might contain parameters if you defined any).
-                        echo "INFO: Security review approved. Proceeding with pipeline."
-                        // if (userInput.APPROVER_USER_ID) { // If you used submitterParameter
-                        //     echo "INFO: Approved by: ${userInput.APPROVER_USER_ID}"
-                        // }
-
+                        echo "INFO: Security review approved. Proceeding."
                     } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException e) {
-                        // This catch block handles if the input is manually "Aborted" by a user,
-                        // or if the timeout is reached.
                         echo "ERROR: Security Review was aborted or timed out."
-                        currentBuild.result = 'ABORTED' // Set the build status
-                        error "Pipeline aborted at Security Review Gate." // Stops the pipeline and marks it as failed/aborted
+                        currentBuild.result = 'ABORTED'; error "Pipeline aborted at Security Review Gate."
                     }
-                    
-                    echo "INFO: Security Analysis & Approval stage complete."
                     echo "-------------------------------------------------------------------"
                 }
             }
         }
 
-        stage('Release') {
+        stage('Release to Docker Hub') {
             steps {
                 script {
                     echo "-------------------------------------------------------------------"
-                    echo "INFO: Starting Stage: Release"
+                    echo "INFO: Starting Stage: Release to Docker Hub"
+                    
+                    def releaseTag = "v1.0.${env.APP_VERSION}" 
 
-                    // Ensure DOCKERHUB_USERNAME is set in your environment block or directly here
-                    // def dockerHubUsername = "yourdockerhubusername" // Or from env.DOCKERHUB_USERNAME
-                    // Ensure you have your DOCKERHUB_CREDENTIALS_ID from Jenkins credentials
-                    def dockerHubCredentialsId = 'dockerhub-credentials' // The ID you gave your Docker Hub creds in Jenkins
-
-                    // Define the release tag (e.g., using the build number or a semantic version)
-                    def releaseTag = "release-${env.APP_VERSION}" // Example: release-17
-
-                    // Image names built in previous stages
                     def localPhpImageFullName    = "${env.PHP_IMAGE_PREFIX}:${env.APP_VERSION}"
                     def localApacheImageFullName = "${env.APACHE_IMAGE_PREFIX}:${env.APP_VERSION}"
                     def localMysqlImageFullName  = "${env.MYSQL_IMAGE_PREFIX}:${env.APP_VERSION}"
 
-                    // Define target image names for Docker Hub (replace 'yourdockerhubusername')
-                    def targetPhpImage    = "${env.DOCKERHUB_USER}/${env.PHP_IMAGE}:${releaseTag}"
-                    def targetApacheImage = "${env.DOCKERHUB_USER}/${env.APACHE_IMAGE}:${releaseTag}"
-                    def targetMysqlImage  = "${env.DOCKERHUB_USER}/${env.MYSQL_IMAGE}:${releaseTag}"
-                    // Note: .split('/')[1] is used to get the 's753-t73-php' part if IMAGE_PREFIX is 'localhost/s753-t73-php'
+                    def targetPhpImage    = "${env.DOCKERHUB_USER}/${env.PHP_APP_IMAGE_BASE_NAME}:${releaseTag}"
+                    def targetApacheImage = "${env.DOCKERHUB_USER}/${env.APACHE_APP_IMAGE_BASE_NAME}:${releaseTag}"
+                    def targetMysqlImage  = "${env.DOCKERHUB_USER}/${env.MYSQL_APP_IMAGE_BASE_NAME}:${releaseTag}"
 
                     echo "INFO: Release Tag: ${releaseTag}"
-                    echo "INFO: Target PHP Image for Docker Hub: ${targetPhpImage}"
-                    echo "INFO: Target Apache Image for Docker Hub: ${targetApacheImage}"
-                    echo "INFO: Target MySQL Image for Docker Hub: ${targetMysqlImage}"
+                    // ... (rest of echo statements)
 
-                    // Use 'withCredentials' to securely access Docker Hub credentials
-                    withCredentials([usernamePassword(credentialsId: dockerHubCredentialsId, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CREDENTIALS_ID, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         try {
                             echo "INFO: Logging in to Docker Hub..."
                             sh "docker login -u \"${DOCKER_USER}\" -p \"${DOCKER_PASS}\""
 
-                            echo "INFO: Re-tagging and Pushing PHP image..."
                             sh "docker tag \"${localPhpImageFullName}\" \"${targetPhpImage}\""
                             sh "docker push \"${targetPhpImage}\""
+                            echo "SUCCESS: Pushed PHP image."
 
-                            echo "INFO: Re-tagging and Pushing Apache image..."
                             sh "docker tag \"${localApacheImageFullName}\" \"${targetApacheImage}\""
                             sh "docker push \"${targetApacheImage}\""
+                            echo "SUCCESS: Pushed Apache image."
                             
-                            echo "INFO: Re-tagging and Pushing MySQL image..."
                             sh "docker tag \"${localMysqlImageFullName}\" \"${targetMysqlImage}\""
                             sh "docker push \"${targetMysqlImage}\""
+                            echo "SUCCESS: Pushed MySQL image."
 
-                            echo "SUCCESS: All images pushed to Docker Hub."
-
-                            // (Optional) Git tagging
-                            echo "INFO: Tagging Git commit for release..."
-                            // Ensure Git user is configured if Jenkins runs as a generic user
-                            // sh "git config --global user.email 'jenkins@example.com'"
-                            // sh "git config --global user.name 'Jenkins CI'"
-                            sh "git tag -a \"${releaseTag}\" -m \"Release ${releaseTag}\""
-                            sh "git push origin \"${releaseTag}\"" // Push the tag to remote
-                            echo "SUCCESS: Git commit tagged and pushed as ${releaseTag}."
+                            // ... (Git tagging part - ensure Jenkins has push credentials or do it manually)
+                            echo "INFO: Git commit tagging can be added here if Jenkins has Git push credentials."
 
                         } catch (Exception e) {
                             echo "ERROR: Release stage failed: ${e.getMessage()}"
-                            currentBuild.result = 'FAILURE'
-                            error "Release stage failed."
+                            currentBuild.result = 'FAILURE'; error "Release stage failed."
                         } finally {
                             echo "INFO: Logging out from Docker Hub..."
-                            sh "docker logout" // Good practice to logout
+                            sh "docker logout"
                         }
                     }
                     echo "-------------------------------------------------------------------"
                 }
             }
         }
-    }
+
+        stage('Deploy to Production (Minikube)') {
+            steps {
+                script {
+                    echo "-------------------------------------------------------------------"
+                    echo "INFO: Starting Stage: Deploy to Production (Minikube)"
+                    
+                    def releaseTag = "v1.0.${env.APP_VERSION}" // As defined in Release stage
+                    def k8sManifestPath = "k8s"
+                    def dockerHubUser = env.DOCKERHUB_USER // From global environment
+
+                    // Target images based on base names (assuming IMAGE_PREFIX was like localhost/basename)
+                    def mysqlImageBaseName = env.MYSQL_APP_IMAGE_BASE_NAME
+                    def phpImageBaseName   = env.PHP_APP_IMAGE_BASE_NAME
+                    def apacheImageBaseName= env.APACHE_APP_IMAGE_BASE_NAME
+
+                    echo "INFO: Updating image tags in Kubernetes manifests to: ${releaseTag}"
+
+                    // Use sed to update the image tag in each YAML file.
+                    // This assumes your YAML files have an 'image:' line that includes the Docker Hub user and base image name.
+                    // Example: image: yourdockerhubusername/s753-t73-mysql:some-old-tag
+                    // The '.*' will match any existing tag on that line.
+                    
+                    sh """
+                        sed -i 's|image: ${dockerHubUser}/${mysqlImageBaseName}:.*|image: ${dockerHubUser}/${mysqlImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/mysql-prod.yaml
+                        sed -i 's|image: ${dockerHubUser}/${phpImageBaseName}:.*|image: ${dockerHubUser}/${phpImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/php-prod.yaml
+                        sed -i 's|image: ${dockerHubUser}/${apacheImageBaseName}:.*|image: ${dockerHubUser}/${apacheImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/apache-prod.yaml
+                    """
+
+                    echo "INFO: Applying Kubernetes manifests from ${k8sManifestPath} directory..."
+                    try {
+                        sh "kubectl create namespace ${env.PROD_K8S_NAMESPACE} || echo 'INFO: Namespace ${env.PROD_K8S_NAMESPACE} already exists or error.'"
+                        
+                        sh "kubectl apply -f ${k8sManifestPath}/mysql-prod.yaml --namespace=${env.PROD_K8S_NAMESPACE}"
+                        sh "kubectl apply -f ${k8sManifestPath}/php-prod.yaml --namespace=${env.PROD_K8S_NAMESPACE}"
+                        sh "kubectl apply -f ${k8sManifestPath}/apache-prod.yaml --namespace=${env.PROD_K8S_NAMESPACE}"
+
+                        echo "INFO: Waiting for deployments to roll out..."
+                        sh "kubectl rollout status deployment/s753-mysql-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
+                        sh "kubectl rollout status deployment/s753-php-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
+                        sh "kubectl rollout status deployment/s753-apache-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
+                        
+                        // ... rest of the stage ...
+                    } catch (Exception e) {
+                        echo "ERROR: Deploy to Production (Minikube) failed: ${e.getMessage()}"
+                        currentBuild.result = 'FAILURE'; error "Deploy to Production (Minikube) failed."
+                    }
+                    echo "-------------------------------------------------------------------"
+                }
+            }
+        }
+
+
+    } // End of stages
+
 
 }

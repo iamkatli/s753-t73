@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-prod-svc  # PHP application will connect to this service name
+  namespace: s753-production # As defined in your Jenkinsfile
+  labels:
+    app: s753-mysql
+    environment: production
+spec:
+  ports:
+    - port: 3306
+      name: mysql
+  selector:
+    app: s753-mysql
+    environment: production
+  clusterIP: None # Creates a headless service, good for StatefulSets (or Deployments if you prefer)
+---
+apiVersion: apps/v1
+kind: Deployment # Using Deployment for simplicity; StatefulSet is often preferred for databases
+metadata:
+  name: s753-mysql-prod-deployment
+  namespace: s753-production
+  labels:
+    app: s753-mysql
+    environment: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: s753-mysql
+      environment: production
+  template:
+    metadata:
+      labels:
+        app: s753-mysql
+        environment: production
+    spec:
+      containers:
+        - name: mysql
+          image: docker1010/s753-t73-mysql:v1.0.35
+          args: # To specify default authentication plugin
+            - "--default-authentication-plugin=mysql_native_password"
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "password" # Use K8s Secrets for production
+            - name: MYSQL_DATABASE
+              value: "mydb_production" # As per Jenkinsfile PROD_DB_NAME
+            - name: MYSQL_USER
+              value: "prod_admin"      # As per Jenkinsfile PROD_DB_USERNAME
+            - name: MYSQL_PASSWORD
+              value: "prod_secure_password" # Use K8s Secrets for production
+          volumeMounts:
+            - name: mysql-persistent-storage
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: mysql-persistent-storage
+          hostPath: # For Minikube simplicity. For real prod, use a PersistentVolumeClaim.
+            path: /data/s753-mysql-prod-data # Ensure this path is available/writable on your Minikube node(s)
+            type: DirectoryOrCreate
