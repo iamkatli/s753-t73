@@ -6,9 +6,13 @@ pipeline {
     environment {
         // Define common environment variables here
         // Replace 'yourdockerhubusername' accordingly
-        PHP_IMAGE_PREFIX    = "localhost/s753-t73-php"
-        APACHE_IMAGE_PREFIX = "localhost/s753-t73-apache"
-        MYSQL_IMAGE_PREFIX  = "localhost/s753-t73-mysql"
+        LOCAL_IMAGE_REPO    = "localhost"
+        PHP_IMAGE           = "s753-t73-php"
+        APACHE_IMAGE        = "s753-t73-apache"
+        MYSQL_IMAGE         = "s753-t73-mysql"
+        PHP_IMAGE_PREFIX    = "${LOCAL_IMAGE_REPO}/${PHP_IMAGE}"
+        APACHE_IMAGE_PREFIX = "${LOCAL_IMAGE_REPO}/${APACHE_IMAGE}"
+        MYSQL_IMAGE_PREFIX  = "${LOCAL_IMAGE_REPO}/${MYSQL_IMAGE}"
         APP_VERSION         = "${env.BUILD_NUMBER ?: 'latest'}" // Use Jenkins build number
 
         // For Deploy Stage
@@ -32,6 +36,10 @@ pipeline {
         SONAR_EXPOSED_PORT   = "9002"
         SONAR_HOST_URL_ENV   = "http://${SONAR_SERVER}:${SONAR_EXPOSED_PORT}"
         SONAR_TOKEN_ENV      = "sqa_1bff1a3237a77b40451a377f0f59c30443dcadc7"
+
+        // For release stage
+        DOCKERHUB_USER       = "docker1010"
+        
     }
 
     stages {
@@ -257,7 +265,7 @@ pipeline {
                     try {
                         // Pause the pipeline and wait for manual input.
                         // The timeout prevents the pipeline from waiting indefinitely.
-                        userInput = timeout(time: 1, unit: 'HOURS') {
+                        userInput = timeout(time: 2, unit: 'HOURS') {
                             input(
                                 id: 'securityApproval', // Optional ID for the input
                                 message: "Security Review Gate: Please check the SonarQube report at ${env.SONAR_HOST_URL_ENV}/dashboard?id=s753-t73. Do you approve to continue?",
@@ -288,9 +296,78 @@ pipeline {
             }
         }
 
-// ... (post actions, and other future stages like Release, Monitoring) ...
+        stage('Release') {
+            steps {
+                script {
+                    echo "-------------------------------------------------------------------"
+                    echo "INFO: Starting Stage: Release"
 
-// ... (post actions) ...
+                    // Ensure DOCKERHUB_USERNAME is set in your environment block or directly here
+                    // def dockerHubUsername = "yourdockerhubusername" // Or from env.DOCKERHUB_USERNAME
+                    // Ensure you have your DOCKERHUB_CREDENTIALS_ID from Jenkins credentials
+                    def dockerHubCredentialsId = 'dockerhub-credentials' // The ID you gave your Docker Hub creds in Jenkins
+
+                    // Define the release tag (e.g., using the build number or a semantic version)
+                    def releaseTag = "release-${env.APP_VERSION}" // Example: release-17
+
+                    // Image names built in previous stages
+                    def localPhpImageFullName    = "${env.PHP_IMAGE_PREFIX}:${env.APP_VERSION}"
+                    def localApacheImageFullName = "${env.APACHE_IMAGE_PREFIX}:${env.APP_VERSION}"
+                    def localMysqlImageFullName  = "${env.MYSQL_IMAGE_PREFIX}:${env.APP_VERSION}"
+
+                    // Define target image names for Docker Hub (replace 'yourdockerhubusername')
+                    def targetPhpImage    = "${env.DOCKERHUB_USER}/${env.PHP_IMAGE}:${releaseTag}"
+                    def targetApacheImage = "${env.DOCKERHUB_USER}/${env.APACHE_IMAGE}:${releaseTag}"
+                    def targetMysqlImage  = "${env.DOCKERHUB_USER}/${env.MYSQL_IMAGE}:${releaseTag}"
+                    // Note: .split('/')[1] is used to get the 's753-t73-php' part if IMAGE_PREFIX is 'localhost/s753-t73-php'
+
+                    echo "INFO: Release Tag: ${releaseTag}"
+                    echo "INFO: Target PHP Image for Docker Hub: ${targetPhpImage}"
+                    echo "INFO: Target Apache Image for Docker Hub: ${targetApacheImage}"
+                    echo "INFO: Target MySQL Image for Docker Hub: ${targetMysqlImage}"
+
+                    // Use 'withCredentials' to securely access Docker Hub credentials
+                    withCredentials([usernamePassword(credentialsId: dockerHubCredentialsId, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        try {
+                            echo "INFO: Logging in to Docker Hub..."
+                            sh "docker login -u \"${DOCKER_USER}\" -p \"${DOCKER_PASS}\""
+
+                            echo "INFO: Re-tagging and Pushing PHP image..."
+                            sh "docker tag \"${localPhpImageFullName}\" \"${targetPhpImage}\""
+                            sh "docker push \"${targetPhpImage}\""
+
+                            echo "INFO: Re-tagging and Pushing Apache image..."
+                            sh "docker tag \"${localApacheImageFullName}\" \"${targetApacheImage}\""
+                            sh "docker push \"${targetApacheImage}\""
+                            
+                            echo "INFO: Re-tagging and Pushing MySQL image..."
+                            sh "docker tag \"${localMysqlImageFullName}\" \"${targetMysqlImage}\""
+                            sh "docker push \"${targetMysqlImage}\""
+
+                            echo "SUCCESS: All images pushed to Docker Hub."
+
+                            // (Optional) Git tagging
+                            echo "INFO: Tagging Git commit for release..."
+                            // Ensure Git user is configured if Jenkins runs as a generic user
+                            // sh "git config --global user.email 'jenkins@example.com'"
+                            // sh "git config --global user.name 'Jenkins CI'"
+                            sh "git tag -a \"${releaseTag}\" -m \"Release ${releaseTag}\""
+                            sh "git push origin \"${releaseTag}\"" // Push the tag to remote
+                            echo "SUCCESS: Git commit tagged and pushed as ${releaseTag}."
+
+                        } catch (Exception e) {
+                            echo "ERROR: Release stage failed: ${e.getMessage()}"
+                            currentBuild.result = 'FAILURE'
+                            error "Release stage failed."
+                        } finally {
+                            echo "INFO: Logging out from Docker Hub..."
+                            sh "docker logout" // Good practice to logout
+                        }
+                    }
+                    echo "-------------------------------------------------------------------"
+                }
+            }
+        }
     }
 
 }
