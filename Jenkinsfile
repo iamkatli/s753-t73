@@ -25,7 +25,7 @@ pipeline {
         // For Test Stage
         APP_URL              = "http://localhost:${APACHE_EXPOSED_PORT}"
         INDEX_PAGE_URL       = "${APP_URL}/index.php"
-        EXPECTED_TEXT        = "Welcome" // CHANGE THIS!
+        EXPECTED_TEXT        = "ABC Portal" // CHANGE THIS!
     }
 
     stages {
