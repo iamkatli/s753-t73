@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
-    <h2>Login</h2>
+    <h2>Login Page of ABC Portal</h2>
     <?php if ($error): ?>
         <p class="error"><?php echo htmlspecialchars($error); ?></p>
     <?php endif; ?>
