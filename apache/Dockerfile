@@ -5,7 +5,7 @@ RUN apk update; \
     apk upgrade;
 
 # Copy your custom Apache configuration
-COPY apache_php.conf /usr/local/apache2/conf/apache_php.conf
+COPY apache/apache_php.conf /usr/local/apache2/conf/apache_php.conf
 RUN echo "Include /usr/local/apache2/conf/apache_php.conf" \
     >> /usr/local/apache2/conf/httpd.conf
 
