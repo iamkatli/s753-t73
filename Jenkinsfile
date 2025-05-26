@@ -498,7 +498,8 @@ pipeline {
 
                     sh """
                         kubectl cluster-info
-
+                        echo "INFO: Adding Prometheus Helm community repository if not already added..."
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || echo "INFO: Prometheus repo may already be added or error occurred (continuing)."
                         echo "INFO: Adding Prometheus Helm community repository if not already added..."
                         helm repo update
 
