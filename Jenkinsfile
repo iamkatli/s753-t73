@@ -206,9 +206,66 @@ pipeline {
             }
         }
         
+// Jenkinsfile
+// ... (environment block and previous stages: Checkout, Build Docker Images, Deploy, Test) ...
 
-        
-        // Add other stages here: Code Quality, Security, Release, Monitoring
+        stage('Code Quality Analysis') {
+            steps {
+                script {
+                    echo "-------------------------------------------------------------------"
+                    echo "INFO: Starting Stage: Code Quality Analysis with SonarQube"
+                    
+                    // Ensure sonar-project.properties is present (it's checked in with your code)
+                    // The SonarQube server should be running and accessible at the URL
+                    // specified in sonar-project.properties (e.g., http://localhost:9000)
+
+                    // Define SonarQube server URL and token if not in properties file or to override
+                    // For this example, we assume it's in sonar-project.properties
+                    // def sonarqubeServer = 'http://localhost:9000' // Or from env variable
+                    // def sonarqubeToken = 'your_sonarqube_user_token' // Use Jenkins credentials for this!
+
+                    // Run SonarScanner using its Docker image
+                    // This mounts the current Jenkins workspace (your project code) into the scanner container
+                    // The scanner will pick up the sonar-project.properties file from the workspace root.
+                    try {
+                        // Make sure the SonarQube server (e.g., running in Docker on port 9000)
+                        // is accessible from where this Jenkins pipeline runs.
+                        // If Jenkins itself is a Docker container, network configuration is important.
+                        // If Jenkins runs on the host and SonarQube is a Docker container on the same host,
+                        // localhost:9000 for sonar.host.url should generally work for the scanner running on the host.
+                        // If scanner runs as Docker, then host.docker.internal or IP might be needed for sonar.host.url.
+                        // For simplicity, this example uses a common SonarScanner Docker image.
+                        
+                        // If SonarQube server is running as a Docker container named 'sonarqube' and Jenkins
+                        // agent can access Docker network, you might need to adjust sonar.host.url
+                        // or run the scanner on the same network.
+                        // Easiest if sonar.host.url in sonar-project.properties points to an accessible IP/hostname.
+
+                        sh """
+                           docker run \\
+                               --rm \\
+                               -e SONAR_HOST_URL="\${SONAR_HOST_URL_ENV:-http://localhost:9002}" \\
+                               # -e SONAR_LOGIN="\${SONAR_TOKEN_ENV}" \\ # If using token via env
+                               -v "${env.WORKSPACE}:/usr/src" \\
+                               sonarsource/sonar-scanner-cli
+                        """
+                        // Note: SONAR_HOST_URL_ENV and SONAR_TOKEN_ENV would be Jenkins environment variables
+                        // you set up, possibly from credentials. For now, assuming sonar-project.properties has the URL.
+                        // If sonar.login token is in sonar-project.properties, no SONAR_LOGIN env var needed here.
+
+                        echo "SUCCESS: SonarQube analysis submitted. Check SonarQube dashboard."
+                    } catch (Exception e) {
+                        echo "ERROR: SonarQube analysis FAILED: ${e.getMessage()}"
+                        // Decide if you want to fail the pipeline if analysis fails
+                        // currentBuild.result = 'FAILURE'
+                        // error "SonarQube analysis failed"
+                    }
+                    echo "-------------------------------------------------------------------"
+                }
+            }
+        }
+
+// ... (post actions) ...
     }
 
 }
