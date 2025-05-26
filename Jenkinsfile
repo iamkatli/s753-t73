@@ -31,7 +31,7 @@ pipeline {
         SONAR_SERVER         = "10.119.10.137"
         SONAR_EXPOSED_PORT   = "9002"
         SONAR_HOST_URL_ENV   = "http://${SONAR_SERVER}:${SONAR_EXPOSED_PORT}"
-        SONAR_TOKEN_ENV      = "sqa_cd70eae1f9650672e42eb0b8dabd74d9ee4cbfda"
+        SONAR_TOKEN_ENV      = "sqa_1bff1a3237a77b40451a377f0f59c30443dcadc7"
     }
 
     stages {
