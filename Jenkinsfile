@@ -26,6 +26,11 @@ pipeline {
         APP_URL              = "http://localhost:${APACHE_EXPOSED_PORT}"
         INDEX_PAGE_URL       = "${APP_URL}/index.php"
         EXPECTED_TEXT        = "Login Page of ABC Portal"
+
+        // For Code Quality Stage
+        SONAR_EXPOSED_PORT   = "9002"
+        SONAR_HOST_URL_ENV   = "http://localhost:${SONAR_EXPOSED_PORT}"
+        SONAR_TOKEN_ENV      = "sqa_8acad2fc4097b08bf63f668478742668b9b47e76"
     }
 
     stages {
@@ -245,7 +250,7 @@ pipeline {
                            docker run \\
                                --rm \\
                                -e SONAR_HOST_URL="\${SONAR_HOST_URL_ENV:-http://localhost:9002}" \\
-                               # -e SONAR_LOGIN="\${SONAR_TOKEN_ENV}" \\ # If using token via env
+                               -e SONAR_LOGIN="\${SONAR_TOKEN_ENV}" \\ 
                                -v "${env.WORKSPACE}:/usr/src" \\
                                sonarsource/sonar-scanner-cli
                         """
