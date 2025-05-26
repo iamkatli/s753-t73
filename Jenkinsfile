@@ -55,6 +55,11 @@ pipeline {
         // --- Release Stage Vars ---
         DOCKERHUB_USER             = "docker1010"
         DOCKERHUB_CREDENTIALS_ID   = "dockerhub-credentials" // Jenkins Credential ID
+
+        // --- Monitor Stage Vars ---
+        PROMETHEUS_NAMESPACE    = "monitoring" // Namespace to install Prometheus into
+        PROMETHEUS_RELEASE_NAME = "prometheus" // Helm release name
+        PROMETHEUS_NODE_PORT    = "30090"      // Host port to access Prometheus UI
     }
 
     stages {
@@ -479,6 +484,48 @@ pipeline {
                     if (!healthy) {
                          error "ALERT: PRODUCTION Environment Health Check FAILED!" // This will ensure pipeline stops and fails
                     }
+                    echo "-------------------------------------------------------------------"
+                }
+            }
+        }
+
+        stage('Deploy Monitoring System (Prometheus to Minikube)') {
+            steps {
+                script {
+                    echo "-------------------------------------------------------------------"
+                    echo "INFO: Starting Stage: Deploy Monitoring System (Prometheus to Minikube)"
+                    echo "INFO: Ensure Helm v3 is installed on the Jenkins agent."
+
+                    sh """
+                        kubectl cluster-info
+
+                        echo "INFO: Adding Prometheus Helm community repository if not already added..."
+                        helm repo update
+
+                        echo "INFO: Installing or Upgrading Prometheus release '${env.PROMETHEUS_RELEASE_NAME}' in namespace '${env.PROMETHEUS_NAMESPACE}'..."
+                        # --create-namespace will create the namespace if it doesn't exist.
+                        # --wait makes Helm wait until all resources are in a ready state.
+                        # We set server.service.type to NodePort for easier access in Minikube.
+                        helm upgrade --install "${env.PROMETHEUS_RELEASE_NAME}" prometheus-community/prometheus \\
+                            --namespace "${env.PROMETHEUS_NAMESPACE}" \\
+                            --create-namespace \\
+                            --set server.service.type=NodePort \\
+                            --set server.service.nodePort=${env.PROMETHEUS_NODE_PORT} \\
+                            --set alertmanager.enabled=false \\       # Optional: Disable Alertmanager for simplicity
+                            --set pushgateway.enabled=false \\      # Optional: Disable Pushgateway for simplicity
+                            --set kubeStateMetrics.enabled=true \\  # Keep kube-state-metrics
+                            --set nodeExporter.enabled=true \\      # Keep node-exporter
+                            --wait \\
+                            --timeout 6m0s # Adjust timeout as needed
+
+                        echo "INFO: Prometheus Helm chart deployment attempt complete."
+                        echo "INFO: Prometheus server should be accessible via NodePort."
+                        echo "INFO: To access Prometheus UI:"
+                        echo "INFO: 1. Get your Minikube IP by running: minikube ip"
+                        echo "INFO: 2. Open your browser to: http://<Minikube_IP>:${env.PROMETHEUS_NODE_PORT}"
+                        echo "INFO: It might take a few moments for all Prometheus components to be fully ready and accessible."
+                    """
+
                     echo "-------------------------------------------------------------------"
                 }
             }
