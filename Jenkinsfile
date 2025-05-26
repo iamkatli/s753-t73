@@ -381,35 +381,20 @@ pipeline {
                             sed -i 's|image: ${dockerHubUser}/${apacheImageBaseName}:.*|image: ${dockerHubUser}/${apacheImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/apache-prod.yaml
                         """
 
-                        sh label: 'Deploy to Minikube K8s', script: """
-                            set -e 
-                            # The KUBECONFIG environment variable set by Groovy (env.KUBECONFIG)
-                            # will be available to this shell script.
+                        echo "INFO: Applying Kubernetes manifests from ${k8sManifestPath} directory..."
+                    
+                        sh "kubectl create namespace ${env.PROD_K8S_NAMESPACE} || echo 'INFO: Namespace ${env.PROD_K8S_NAMESPACE} already exists or error.'"
+                        
+                        sh "kubectl apply -f ${k8sManifestPath}/mysql-prod.yaml --namespace=${env.PROD_K8S_NAMESPACE}"
+                        sh "kubectl apply -f ${k8sManifestPath}/php-prod.yaml --namespace=${env.PROD_K8S_NAMESPACE}"
+                        sh "kubectl apply -f ${k8sManifestPath}/apache-prod.yaml --namespace=${env.PROD_K8S_NAMESPACE}"
 
-                            echo "INFO: Verifying kubectl connection to cluster using KUBECONFIG='${KUBECONFIG}'..."
-                            kubectl cluster-info
-                            kubectl version --short || echo "WARN: kubectl version --short failed, but continuing..."
-
-                            echo "INFO: Creating namespace '${env.PROD_K8S_NAMESPACE}' if it doesn't exist..."
-                            kubectl create namespace "${env.PROD_K8S_NAMESPACE}" || echo "INFO: Namespace '${env.PROD_K8S_NAMESPACE}' already exists or error creating."
-                            
-                            echo "INFO: Applying MySQL manifest..."
-                            kubectl apply -f "${k8sManifestPath}/mysql-prod.yaml" --namespace="${env.PROD_K8S_NAMESPACE}"
-                            echo "INFO: Applying PHP manifest..."
-                            kubectl apply -f "${k8sManifestPath}/php-prod.yaml" --namespace="${env.PROD_K8S_NAMESPACE}"
-                            echo "INFO: Applying Apache manifest..."
-                            kubectl apply -f "${k8sManifestPath}/apache-prod.yaml" --namespace="${env.PROD_K8S_NAMESPACE}"
-
-                            echo "INFO: Waiting for deployments to roll out..."
-                            kubectl rollout status deployment/s753-mysql-prod-deployment --namespace="${env.PROD_K8S_NAMESPACE}" --timeout=180s
-                            kubectl rollout status deployment/s753-php-prod-deployment --namespace="${env.PROD_K8S_NAMESPACE}" --timeout=180s
-                            kubectl rollout status deployment/s753-apache-prod-deployment --namespace="${env.PROD_K8S_NAMESPACE}" --timeout=180s
-                            
-                            echo "SUCCESS: Production environment deployed to Minikube namespace '${env.PROD_K8S_NAMESPACE}'."
-                            # ...
-                        """
-                    //} // End of withCredentials
-                    echo "-------------------------------------------------------------------"
+                        echo "INFO: Waiting for deployments to roll out..."
+                        sh "kubectl rollout status deployment/s753-mysql-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
+                        sh "kubectl rollout status deployment/s753-php-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
+                        sh "kubectl rollout status deployment/s753-apache-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
+                        
+                        // ... rest of the stage ...
                 }
             }
         }
