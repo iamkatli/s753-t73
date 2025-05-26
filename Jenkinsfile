@@ -98,34 +98,31 @@ pipeline {
             }
         }
 
-stage('Deploy to Test Environment') {
+        stage('Deploy to Test Environment') {
             steps {
                 script {
                     echo "-------------------------------------------------------------------"
                     echo "INFO: Starting Stage: Deploy to Test Environment"
                     
-                    // Construct image full names from environment variables
                     def phpImageFullName    = "${env.PHP_IMAGE_PREFIX}:${env.APP_VERSION}"
                     def apacheImageFullName = "${env.APACHE_IMAGE_PREFIX}:${env.APP_VERSION}"
                     def mysqlImageFullName  = "${env.MYSQL_IMAGE_PREFIX}:${env.APP_VERSION}"
 
-                    // Using single quotes for the sh block to avoid Groovy interpolation issues with '$'
-                    // We will pass Jenkins/Groovy variables into the shell script via environment variables
-                    // or by constructing the command string carefully.
-                    // Simpler: just embed them as we did before, but ensure the shell syntax is robust.
-                    
                     sh label: 'Deploy Services', script: """
                         set -e # Exit immediately if a command exits with a non-zero status.
 
                         echo "INFO: Cleaning up any previous test environment..."
                         docker stop "${env.APACHE_CONTAINER_NAME}" "${env.PHP_CONTAINER_NAME}" "${env.MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
                         docker rm "${env.APACHE_CONTAINER_NAME}" "${env.PHP_CONTAINER_NAME}" "${env.MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
+                        echo "INFO: Removing MySQL data volume s753-db-data-test for clean user initialization..."
+                        docker volume rm s753-db-data-test > /dev/null 2>&1 || true # Ensures MySQL re-initializes the user
                         echo "INFO: Cleanup complete."
                         
                         echo "INFO: Creating Docker network '${env.TEST_NETWORK_NAME}'..."
                         docker network create "${env.TEST_NETWORK_NAME}" > /dev/null 2>&1 || echo "INFO: Network '${env.TEST_NETWORK_NAME}' already exists or error creating."
 
                         echo "INFO: Starting MySQL container ('${env.MYSQL_CONTAINER_NAME}')..."
+                        # Add 'mysqld --default-authentication-plugin=mysql_native_password' at the end
                         docker run -d \\
                             --name "${env.MYSQL_CONTAINER_NAME}" \\
                             --network "${env.TEST_NETWORK_NAME}" \\
@@ -134,14 +131,19 @@ stage('Deploy to Test Environment') {
                             -e MYSQL_USER="${env.DB_USER}" \\
                             -e MYSQL_PASSWORD="${env.DB_PASSWORD}" \\
                             -v "s753-db-data-test:/var/lib/mysql" \\
-                            "${mysqlImageFullName}"
+                            "${mysqlImageFullName}" \\
+                            mysqld --default-authentication-plugin=mysql_native_password
+                        
                         echo "INFO: MySQL container started. Waiting for it to initialize..."
-                        sleep 20 # Consider a more robust health check here for a real-world scenario
+                        # Increased sleep slightly to ensure MySQL has time to fully initialize with the new volume
+                        sleep 30 
 
                         echo "INFO: Starting PHP-FPM container ('${env.PHP_CONTAINER_NAME}')..."
                         docker run -d \\
                             --name "${env.PHP_CONTAINER_NAME}" \\
                             --network "${env.TEST_NETWORK_NAME}" \\
+                            # If your PHP app needs specific env vars for DB connection (though it reads from config.php)
+                            # -e DB_HOST="${env.MYSQL_CONTAINER_NAME}" \\ # Example if config.php used getenv()
                             "${phpImageFullName}"
                         echo "INFO: PHP-FPM container started."
 
@@ -162,6 +164,9 @@ stage('Deploy to Test Environment') {
                 }
             }
         }
+// ... (rest of Jenkinsfile, e.g., Test Stage, post actions)
+
+
 
         
         // Add other stages here: Code Quality, Security, Release, Monitoring
