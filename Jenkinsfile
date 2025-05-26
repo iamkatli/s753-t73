@@ -115,14 +115,13 @@ pipeline {
                         docker stop "${env.APACHE_CONTAINER_NAME}" "${env.PHP_CONTAINER_NAME}" "${env.MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
                         docker rm "${env.APACHE_CONTAINER_NAME}" "${env.PHP_CONTAINER_NAME}" "${env.MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
                         echo "INFO: Removing MySQL data volume s753-db-data-test for clean user initialization..."
-                        docker volume rm s753-db-data-test > /dev/null 2>&1 || true # Ensures MySQL re-initializes the user
+                        docker volume rm s753-db-data-test > /dev/null 2>&1 || true 
                         echo "INFO: Cleanup complete."
                         
                         echo "INFO: Creating Docker network '${env.TEST_NETWORK_NAME}'..."
                         docker network create "${env.TEST_NETWORK_NAME}" > /dev/null 2>&1 || echo "INFO: Network '${env.TEST_NETWORK_NAME}' already exists or error creating."
 
                         echo "INFO: Starting MySQL container ('${env.MYSQL_CONTAINER_NAME}')..."
-                        # Add 'mysqld --default-authentication-plugin=mysql_native_password' at the end
                         docker run -d \\
                             --name "${env.MYSQL_CONTAINER_NAME}" \\
                             --network "${env.TEST_NETWORK_NAME}" \\
@@ -135,16 +134,14 @@ pipeline {
                             mysqld --default-authentication-plugin=mysql_native_password
                         
                         echo "INFO: MySQL container started. Waiting for it to initialize..."
-                        # Increased sleep slightly to ensure MySQL has time to fully initialize with the new volume
                         sleep 30 
 
                         echo "INFO: Starting PHP-FPM container ('${env.PHP_CONTAINER_NAME}')..."
+                        # Ensure this command is clean and the image name is the last argument on its own line (or properly continued)
                         docker run -d \\
                             --name "${env.PHP_CONTAINER_NAME}" \\
                             --network "${env.TEST_NETWORK_NAME}" \\
-                            # If your PHP app needs specific env vars for DB connection (though it reads from config.php)
-                            # -e DB_HOST="${env.MYSQL_CONTAINER_NAME}" \\ # Example if config.php used getenv()
-                            "${phpImageFullName}"
+                            "${phpImageFullName}"  # <-- PHP image name
                         echo "INFO: PHP-FPM container started."
 
                         echo "INFO: Starting Apache container ('${env.APACHE_CONTAINER_NAME}')..."
@@ -152,7 +149,7 @@ pipeline {
                             --name "${env.APACHE_CONTAINER_NAME}" \\
                             --network "${env.TEST_NETWORK_NAME}" \\
                             -p "${env.APACHE_EXPOSED_PORT}:80" \\
-                            "${apacheImageFullName}"
+                            "${apacheImageFullName}" # <-- Apache image name
                         echo "INFO: Apache container started."
                         
                         echo "SUCCESS: Test environment deployed!"
@@ -164,7 +161,6 @@ pipeline {
                 }
             }
         }
-// ... (rest of Jenkinsfile, e.g., Test Stage, post actions)
 
 
 
