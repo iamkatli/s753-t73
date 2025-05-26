@@ -167,25 +167,4 @@ stage('Deploy to Test Environment') {
         // Add other stages here: Code Quality, Security, Release, Monitoring
     }
 
-    post {
-        // Runs after all stages, regardless of outcome
-        always {
-            echo "INFO: Pipeline finished. Cleaning up test containers..."
-            // Add cleanup commands for the deployed test containers if needed,
-            // though the Deploy stage already has a cleanup for previous runs.
-            // If you want to ensure cleanup even on pipeline failure:
-            sh """
-                docker stop "${APACHE_CONTAINER_NAME}" "${PHP_CONTAINER_NAME}" "${MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
-                docker rm "${APACHE_CONTAINER_NAME}" "${PHP_CONTAINER_NAME}" "${MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
-                echo "INFO: Post-pipeline cleanup attempt complete."
-            """
-            // cleanWs() // Cleans up the Jenkins workspace
-        }
-        success {
-            echo "SUCCESS: Pipeline completed successfully!"
-        }
-        failure {
-            echo "FAILURE: Pipeline failed. See logs for details."
-        }
-    }
 }
