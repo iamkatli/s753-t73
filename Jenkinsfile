@@ -22,7 +22,7 @@ pipeline {
         TEST_APACHE_CONTAINER_NAME = "s753-test-apache"
         TEST_APACHE_EXPOSED_PORT   = "8080"
         // DB Connection Vars for Test PHP Container
-        TEST_DB_HOSTNAME           = TEST_MYSQL_CONTAINER_NAME // PHP in test connects to this
+        TEST_DB_HOSTNAME           = "${TEST_MYSQL_CONTAINER_NAME}" // PHP in test connects to this
         TEST_DB_USERNAME           = "admin"
         TEST_DB_PASSWORD           = "password"
         TEST_DB_NAME               = "mydb"
@@ -34,7 +34,7 @@ pipeline {
         PROD_APACHE_K8S_SVC_NAME   = "s753-apache-prod-svc"
         PROD_APACHE_NODE_PORT      = "30080"                  // Example NodePort for K8s Apache service
         // DB Connection Vars for Production PHP Pods (via K8s Deployment env vars)
-        PROD_DB_HOSTNAME           = PROD_MYSQL_K8S_SVC_NAME  // PHP in prod connects to this K8s service
+        PROD_DB_HOSTNAME           = "${PROD_MYSQL_K8S_SVC_NAME}"  // PHP in prod connects to this K8s service
         PROD_DB_USERNAME           = "prod_admin"             // Example: use different creds for prod
         PROD_DB_PASSWORD           = "prod_secure_password"   // Store in K8s Secrets in a real scenario!
         PROD_DB_NAME               = "mydb_production"        // Example: different DB name for prod
