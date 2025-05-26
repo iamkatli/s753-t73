@@ -1,10 +1,16 @@
 services:
   php:
-    build: './php/'
+    build:
+      context: . # Project root as context
+      dockerfile: php/Dockerfile # Specify path to Dockerfile
+    image: localhost/s753-t73-php:latest
     volumes:
       - ./public:/var/www/html/
   apache:
-    build: './apache/'
+    build:
+      context: . # Project root as context
+      dockerfile: apache/Dockerfile # Specify path to Dockerfile
+    image: localhost/s753-t73-apache:latest
     depends_on:
       - php
       - mysql
@@ -13,14 +19,18 @@ services:
     volumes:
       - ./public:/var/www/html/
   mysql:
-    image: mysql:8.0
+    build:
+      context: . # Project root as context
+      dockerfile: mysql/Dockerfile # Specify path to Dockerfile
+    image: localhost/s753-t73-mysql:latest
     restart: always
     ports:
       - "3306:3306"
     volumes:
       - db_data:/var/lib/mysql
-      # Initially creates employees table
-      - ./public/dump:/docker-entrypoint-initdb.d/
+      # The volume mount for dump.sql is NO LONGER NEEDED here,
+      # as the dump.sql is now COPIED into the image by the Dockerfile.
+      # - ./public/dump:/docker-entrypoint-initdb.d/
     environment:
       MYSQL_ROOT_PASSWORD: "password"
       MYSQL_DATABASE: "mydb"
@@ -29,5 +39,3 @@ services:
     command: --default-authentication-plugin=mysql_native_password
 volumes:
     db_data:
-
-
