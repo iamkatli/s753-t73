@@ -250,8 +250,8 @@ pipeline {
                         sh """
                            docker run \\
                                --rm \\
-                               -e SONAR_HOST_URL="\${env.SONAR_HOST_URL_ENV}" \\
-                               -e SONAR_TOKEN="\${env.SONAR_TOKEN_ENV}" \\ 
+                               -e SONAR_HOST_URL="${env.SONAR_HOST_URL_ENV}" \\
+                               -e SONAR_TOKEN="${env.SONAR_TOKEN_ENV}" \\ 
                                -v "${env.WORKSPACE}:/usr/src" \\
                                sonarsource/sonar-scanner-cli
                         """
