@@ -507,7 +507,7 @@ pipeline {
                         # --create-namespace will create the namespace if it doesn't exist.
                         # --wait makes Helm wait until all resources are in a ready state.
                         # We set server.service.type to NodePort for easier access in Minikube.
-                        helm upgrade --install "${env.PROMETHEUS_RELEASE_NAME}" prometheus-community/prometheus \\
+                        helm upgrade "${env.PROMETHEUS_RELEASE_NAME}" prometheus-community/prometheus \\
                             --namespace "${env.PROMETHEUS_NAMESPACE}" \\
                             --create-namespace \\
                             --set server.service.type=NodePort \\
