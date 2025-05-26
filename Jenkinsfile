@@ -408,7 +408,7 @@ pipeline {
                             echo "SUCCESS: Production environment deployed to Minikube namespace '${env.PROD_K8S_NAMESPACE}'."
                             # ...
                         """
-                    } // End of withCredentials
+                    //} // End of withCredentials
                     echo "-------------------------------------------------------------------"
                 }
             }
