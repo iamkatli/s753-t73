@@ -4,8 +4,8 @@ services:
       context: './php/' # Project root as context
       dockerfile: Dockerfile # Specify path to Dockerfile
     image: localhost/s753-t73-php
-    volumes:
-      - ./public:/var/www/html/
+    #volumes:
+    #  - ./public:/var/www/html/
   apache:
     build:
       context: './apache/' # Project root as context
@@ -16,8 +16,8 @@ services:
       - mysql
     ports:
       - "8080:80"
-    volumes:
-      - ./public:/var/www/html/
+    #volumes:
+    #  - ./public:/var/www/html/
   mysql:
     build:
       context: './mysql/' # Project root as context
