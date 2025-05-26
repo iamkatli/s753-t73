@@ -261,7 +261,8 @@ pipeline {
                             input(
                                 id: 'securityApproval', // Optional ID for the input
                                 message: "Security Review Gate: Please check the SonarQube report at ${env.SONAR_HOST_URL_ENV}/dashboard?id=s753-t73. Do you approve to continue?",
-                                ok: "Proceed" // Optional: Custom text for the 'Proceed' button
+                                parameters: [[$class: 'BooleanParameterDefinition', defaultValue: true, description: '', name: 'Proceed with approval?']]
+                                // ok: "Proceed" // Optional: Custom text for the 'Proceed' button
                                 // submitter: 'jenkins_user_id,another_user_id', // Optional: Comma-separated list of Jenkins user IDs or group names who can approve.
                                                                                // If omitted, anyone with Build permission on the job can approve.
                                 // submitterParameter: 'APPROVER_USER_ID' // Optional: Environment variable to store the approver's ID
