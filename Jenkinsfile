@@ -252,7 +252,7 @@ pipeline {
                             -v "${env.WORKSPACE}:/usr/src" \\
                             sonarsource/sonar-scanner-cli \\
                             -Dsonar.projectKey=${env.SONAR_PROJECT_KEY} \\
-                            -Dsonar.sources=php/public \\
+                            -Dsonar.sources=public \\
                             -Dsonar.host.url=${env.SONAR_HOST_URL_ENV} \\
                             -Dsonar.login=${env.SONAR_TOKEN_ENV}
                         """
