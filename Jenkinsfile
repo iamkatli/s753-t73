@@ -56,7 +56,7 @@ pipeline {
 
                     echo "INFO: Building PHP image: ${phpImageFullName}..."
                     try {
-                        sh "(cd php && docker build -t \"${phpImageFullName}\" .)"
+                        sh "(docker build -t \"${phpImageFullName}\" -f php/Dockerfile .)"
                         echo "SUCCESS: PHP Docker image built."
                     } catch (Exception e) {
                         echo "ERROR: PHP Docker image build FAILED: ${e.getMessage()}"
@@ -67,7 +67,7 @@ pipeline {
                     if (buildSuccess) {
                         echo "INFO: Building Apache image: ${apacheImageFullName}..."
                         try {
-                            sh "(cd apache && docker build -t \"${apacheImageFullName}\" .)"
+                            sh "(docker build -t \"${apacheImageFullName}\" apache/Dockerfile .)"
                             echo "SUCCESS: Apache Docker image built."
                         } catch (Exception e) {
                             echo "ERROR: Apache Docker image build FAILED: ${e.getMessage()}"

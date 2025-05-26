@@ -19,7 +19,7 @@ WORKDIR /var/www/html/
 # Copy the application code from your project's php/public directory
 # into Apache's document root (/var/www/html/).
 # The path '../php/public' is relative to the 'apache/' build context directory.
-COPY ../public .
+COPY public /var/www/html/
 # The '.' means "copy everything from ../php/public into the current WORKDIR (/var/www/html/)"
 
 # Ensure the copied files are also owned by the Apache user
