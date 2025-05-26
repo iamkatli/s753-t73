@@ -11,7 +11,7 @@ WORKDIR /var/www/html/
 # Copy the application code from the project's public directory
 # into Apache's document root.
 # '../public' is relative to the 'apache/' build context directory.
-COPY public /var/www/html/
+COPY ../public /var/www/html/
 # The '.' means "copy into the current WORKDIR (/usr/local/apache2/htdocs/)"
 # Alternatively: COPY ../public /usr/local/apache2/htdocs/
 
