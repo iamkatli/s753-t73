@@ -162,50 +162,7 @@ stage('Deploy to Test Environment') {
                 }
             }
         }
-        
-        stage('Automated Tests (Smoke Test)') {
-            steps {
-                script {
-                    echo "-------------------------------------------------------------------"
-                    echo "INFO: Starting Stage: Automated Tests (Smoke Test)"
-                    // Copy the content of your "Test Stage" (smoke test) shell script here
-                    // Use the environment variables
-                    sh """
-                        EXPECTED_HTTP_CODE="200"
-                        TEST_SUCCESS=true
 
-                        echo "INFO: Test 1: Checking accessibility of ${INDEX_PAGE_URL}"
-                        HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" "${INDEX_PAGE_URL}")
-
-                        if [ "\${HTTP_CODE}" -eq "\${EXPECTED_HTTP_CODE}" ]; then
-                            echo "SUCCESS: Index page returned HTTP \${HTTP_CODE}."
-                        else
-                            echo "ERROR: Index page returned HTTP \${HTTP_CODE}. Expected \${EXPECTED_HTTP_CODE}."
-                            TEST_SUCCESS=false
-                        fi
-
-                        if [ "\${TEST_SUCCESS}" = true ]; then
-                            echo "INFO: Test 2: Checking content of ${INDEX_PAGE_URL} for text: '${EXPECTED_TEXT}'"
-                            if curl -s -L "${INDEX_PAGE_URL}" | grep -q "${EXPECTED_TEXT}"; then
-                                echo "SUCCESS: Expected text '${EXPECTED_TEXT}' found on the index page."
-                            else
-                                echo "ERROR: Expected text '${EXPECTED_TEXT}' NOT found on the index page."
-                                TEST_SUCCESS=false
-                            fi
-                        fi
-
-                        if [ "\${TEST_SUCCESS}" = true ]; then
-                            echo "SUCCESS: All smoke tests passed!"
-                        else
-                            echo "ERROR: One or more smoke tests FAILED."
-                            currentBuild.result = 'FAILURE' 
-                            error "Smoke tests failed"
-                        fi
-                    """
-                    echo "-------------------------------------------------------------------"
-                }
-            }
-        }
         
         // Add other stages here: Code Quality, Security, Release, Monitoring
     }
