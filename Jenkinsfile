@@ -98,68 +98,71 @@ pipeline {
             }
         }
 
-        stage('Deploy to Test Environment') {
+stage('Deploy to Test Environment') {
             steps {
                 script {
                     echo "-------------------------------------------------------------------"
                     echo "INFO: Starting Stage: Deploy to Test Environment"
-                    // Copy the content of your "Deploy to Test Environment" shell script here
-                    // Use the environment variables defined above
-                    def phpImageFullName    = "${PHP_IMAGE_PREFIX}:${APP_VERSION}"
-                    def apacheImageFullName = "${APACHE_IMAGE_PREFIX}:${APP_VERSION}"
-                    def mysqlImageFullName  = "${MYSQL_IMAGE_PREFIX}:${APP_VERSION}"
+                    
+                    // Construct image full names from environment variables
+                    def phpImageFullName    = "${env.PHP_IMAGE_PREFIX}:${env.APP_VERSION}"
+                    def apacheImageFullName = "${env.APACHE_IMAGE_PREFIX}:${env.APP_VERSION}"
+                    def mysqlImageFullName  = "${env.MYSQL_IMAGE_PREFIX}:${env.APP_VERSION}"
 
-                    sh """
+                    // Using single quotes for the sh block to avoid Groovy interpolation issues with '$'
+                    // We will pass Jenkins/Groovy variables into the shell script via environment variables
+                    // or by constructing the command string carefully.
+                    // Simpler: just embed them as we did before, but ensure the shell syntax is robust.
+                    
+                    sh label: 'Deploy Services', script: """
+                        set -e # Exit immediately if a command exits with a non-zero status.
+
                         echo "INFO: Cleaning up any previous test environment..."
-                        docker stop "${APACHE_CONTAINER_NAME}" "${PHP_CONTAINER_NAME}" "${MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
-                        docker rm "${APACHE_CONTAINER_NAME}" "${PHP_CONTAINER_NAME}" "${MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
+                        docker stop "${env.APACHE_CONTAINER_NAME}" "${env.PHP_CONTAINER_NAME}" "${env.MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
+                        docker rm "${env.APACHE_CONTAINER_NAME}" "${env.PHP_CONTAINER_NAME}" "${env.MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
                         echo "INFO: Cleanup complete."
                         
-                        echo "INFO: Creating Docker network '${TEST_NETWORK_NAME}'..."
-                        docker network create "${TEST_NETWORK_NAME}" > /dev/null 2>&1 || echo "INFO: Network '${TEST_NETWORK_NAME}' already exists or error creating."
+                        echo "INFO: Creating Docker network '${env.TEST_NETWORK_NAME}'..."
+                        docker network create "${env.TEST_NETWORK_NAME}" > /dev/null 2>&1 || echo "INFO: Network '${env.TEST_NETWORK_NAME}' already exists or error creating."
 
-                        echo "INFO: Starting MySQL container ('${MYSQL_CONTAINER_NAME}')..."
+                        echo "INFO: Starting MySQL container ('${env.MYSQL_CONTAINER_NAME}')..."
                         docker run -d \\
-                            --name "${MYSQL_CONTAINER_NAME}" \\
-                            --network "${TEST_NETWORK_NAME}" \\
-                            -e MYSQL_ROOT_PASSWORD="${DB_ROOT_PASSWORD}" \\
-                            -e MYSQL_DATABASE="${DB_DATABASE}" \\
-                            -e MYSQL_USER="${DB_USER}" \\
-                            -e MYSQL_PASSWORD="${DB_PASSWORD}" \\
+                            --name "${env.MYSQL_CONTAINER_NAME}" \\
+                            --network "${env.TEST_NETWORK_NAME}" \\
+                            -e MYSQL_ROOT_PASSWORD="${env.DB_ROOT_PASSWORD}" \\
+                            -e MYSQL_DATABASE="${env.DB_DATABASE}" \\
+                            -e MYSQL_USER="${env.DB_USER}" \\
+                            -e MYSQL_PASSWORD="${env.DB_PASSWORD}" \\
                             -v "s753-db-data-test:/var/lib/mysql" \\
                             "${mysqlImageFullName}"
-                        
-                        # Basic check (can be improved with a loop)
-                        if [ \$? -ne 0 ]; then echo "ERROR: Failed to start MySQL container."; currentBuild.result = 'FAILURE'; error("MySQL start failed"); fi
                         echo "INFO: MySQL container started. Waiting for it to initialize..."
-                        sleep 20
+                        sleep 20 # Consider a more robust health check here for a real-world scenario
 
-                        echo "INFO: Starting PHP-FPM container ('${PHP_CONTAINER_NAME}')..."
+                        echo "INFO: Starting PHP-FPM container ('${env.PHP_CONTAINER_NAME}')..."
                         docker run -d \\
-                            --name "${PHP_CONTAINER_NAME}" \\
-                            --network "${TEST_NETWORK_NAME}" \\
+                            --name "${env.PHP_CONTAINER_NAME}" \\
+                            --network "${env.TEST_NETWORK_NAME}" \\
                             "${phpImageFullName}"
-                        if [ \$? -ne 0 ]; then echo "ERROR: Failed to start PHP-FPM container."; currentBuild.result = 'FAILURE'; error("PHP-FPM start failed"); fi
                         echo "INFO: PHP-FPM container started."
 
-                        echo "INFO: Starting Apache container ('${APACHE_CONTAINER_NAME}')..."
+                        echo "INFO: Starting Apache container ('${env.APACHE_CONTAINER_NAME}')..."
                         docker run -d \\
-                            --name "${APACHE_CONTAINER_NAME}" \\
-                            --network "${TEST_NETWORK_NAME}" \\
-                            -p "${APACHE_EXPOSED_PORT}:80" \\
+                            --name "${env.APACHE_CONTAINER_NAME}" \\
+                            --network "${env.TEST_NETWORK_NAME}" \\
+                            -p "${env.APACHE_EXPOSED_PORT}:80" \\
                             "${apacheImageFullName}"
-                        if [ \$? -ne 0 ]; then echo "ERROR: Failed to start Apache container."; currentBuild.result = 'FAILURE'; error("Apache start failed"); fi
                         echo "INFO: Apache container started."
                         
                         echo "SUCCESS: Test environment deployed!"
-                        echo "Your application should be accessible on: http://localhost:${APACHE_EXPOSED_PORT}"
-                        docker ps --filter network="${TEST_NETWORK_NAME}"
+                        echo "Your application should be accessible on: http://localhost:${env.APACHE_EXPOSED_PORT}"
+                        echo "Services running:"
+                        docker ps --filter network="${env.TEST_NETWORK_NAME}"
                     """
                     echo "-------------------------------------------------------------------"
                 }
             }
         }
-
+        
         stage('Automated Tests (Smoke Test)') {
             steps {
                 script {
