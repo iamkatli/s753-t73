@@ -215,33 +215,79 @@ pipeline {
 // Jenkinsfile
 // ... (environment block and previous stages: Checkout, Build Docker Images, Deploy, Test) ...
 
-    stage('Code Quality Analysis') {
-                steps {
-                    script {
-                        echo "-------------------------------------------------------------------"
-                        echo "INFO: Starting Stage: Code Quality Analysis with SonarQube"
-                        
-                        try {
-                            // Put the entire docker run command on a single line
-                            sh """
-                            docker run --rm -e SONAR_HOST_URL="${env.SONAR_HOST_URL_ENV}" -e SONAR_TOKEN="${env.SONAR_TOKEN_ENV}" -v "${env.WORKSPACE}:/usr/src" sonarsource/sonar-scanner-cli
-                            """
-                            // Note: If SONAR_TOKEN_ENV is managed by Jenkins credentials, it would be injected differently,
-                            // e.g., within a withCredentials block. For now, using the environment variable as you have it.
+        stage('Code Quality Analysis') {
+            steps {
+                script {
+                    echo "-------------------------------------------------------------------"
+                    echo "INFO: Starting Stage: Code Quality Analysis with SonarQube"
+                    
+                    try {
+                        // Put the entire docker run command on a single line
+                        sh """
+                        docker run --rm -e SONAR_HOST_URL="${env.SONAR_HOST_URL_ENV}" -e SONAR_TOKEN="${env.SONAR_TOKEN_ENV}" -v "${env.WORKSPACE}:/usr/src" sonarsource/sonar-scanner-cli
+                        """
+                        // Note: If SONAR_TOKEN_ENV is managed by Jenkins credentials, it would be injected differently,
+                        // e.g., within a withCredentials block. For now, using the environment variable as you have it.
 
-                            echo "SUCCESS: SonarQube analysis submitted. Check SonarQube dashboard."
-                        } catch (Exception e) {
-                            echo "ERROR: SonarQube analysis FAILED: ${e.getMessage()}"
-                            // Decide if you want to fail the pipeline if analysis fails
-                            currentBuild.result = 'FAILURE' // This will mark the stage/build as failed
-                            error "SonarQube analysis failed" // This will stop the pipeline
-                        }
-                        echo "-------------------------------------------------------------------"
+                        echo "SUCCESS: SonarQube analysis submitted. Check SonarQube dashboard."
+                    } catch (Exception e) {
+                        echo "ERROR: SonarQube analysis FAILED: ${e.getMessage()}"
+                        // Decide if you want to fail the pipeline if analysis fails
+                        currentBuild.result = 'FAILURE' // This will mark the stage/build as failed
+                        error "SonarQube analysis failed" // This will stop the pipeline
                     }
+                    echo "-------------------------------------------------------------------"
                 }
             }
+        }
 
+        // Jenkinsfile
+// ... (environment block and previous stages: Checkout, Build, Deploy, Test, Code Quality) ...
 
+        stage('Security Analysis & Approval') { // Renamed for clarity
+            steps {
+                script {
+                    echo "-------------------------------------------------------------------"
+                    echo "INFO: Starting Stage: Security Analysis & Approval"
+                    echo "INFO: The SonarQube scan has completed in the previous 'Code Quality Analysis' stage."
+                    echo "INFO: Please review the SonarQube dashboard for security vulnerabilities and hotspots at:"
+                    echo "INFO: ${env.SONAR_HOST_URL_ENV}/dashboard?id=s753-t73" // Ensure s753-t73 is your sonar.projectKey
+
+                    def userInput
+                    try {
+                        // Pause the pipeline and wait for manual input.
+                        // The timeout prevents the pipeline from waiting indefinitely.
+                        userInput = timeout(time: 1, unit: 'HOURS') {
+                            input(
+                                id: 'securityApproval', // Optional ID for the input
+                                message: "Security Review Gate: Please check the SonarQube report at ${env.SONAR_HOST_URL_ENV}/dashboard?id=s753-t73. Do you approve to continue?",
+                                // ok: "Proceed", // Optional: Custom text for the 'Proceed' button
+                                // submitter: 'jenkins_user_id,another_user_id', // Optional: Comma-separated list of Jenkins user IDs or group names who can approve.
+                                                                               // If omitted, anyone with Build permission on the job can approve.
+                                // submitterParameter: 'APPROVER_USER_ID' // Optional: Environment variable to store the approver's ID
+                            )
+                        }
+                        // If 'Proceed' is clicked, userInput will not be null (it might contain parameters if you defined any).
+                        echo "INFO: Security review approved. Proceeding with pipeline."
+                        // if (userInput.APPROVER_USER_ID) { // If you used submitterParameter
+                        //     echo "INFO: Approved by: ${userInput.APPROVER_USER_ID}"
+                        // }
+
+                    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException e) {
+                        // This catch block handles if the input is manually "Aborted" by a user,
+                        // or if the timeout is reached.
+                        echo "ERROR: Security Review was aborted or timed out."
+                        currentBuild.result = 'ABORTED' // Set the build status
+                        error "Pipeline aborted at Security Review Gate." // Stops the pipeline and marks it as failed/aborted
+                    }
+                    
+                    echo "INFO: Security Analysis & Approval stage complete."
+                    echo "-------------------------------------------------------------------"
+                }
+            }
+        }
+
+// ... (post actions, and other future stages like Release, Monitoring) ...
 
 // ... (post actions) ...
     }
