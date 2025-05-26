@@ -3,14 +3,14 @@ services:
     build:
       context: . # Project root as context
       dockerfile: php/Dockerfile # Specify path to Dockerfile
-    image: localhost/s753-t73-php:latest
+    image: localhost/s753-t73-php
     volumes:
       - ./public:/var/www/html/
   apache:
     build:
       context: . # Project root as context
       dockerfile: apache/Dockerfile # Specify path to Dockerfile
-    image: localhost/s753-t73-apache:latest
+    image: localhost/s753-t73-apache
     depends_on:
       - php
       - mysql
@@ -22,7 +22,7 @@ services:
     build:
       context: . # Project root as context
       dockerfile: mysql/Dockerfile # Specify path to Dockerfile
-    image: localhost/s753-t73-mysql:latest
+    image: localhost/s753-t73-mysql
     restart: always
     ports:
       - "3306:3306"
