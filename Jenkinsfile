@@ -342,56 +342,77 @@ pipeline {
             }
         }
 
+// Jenkinsfile
+// ... (previous stages and environment block) ...
+
         stage('Deploy to Production (Minikube)') {
             steps {
                 script {
                     echo "-------------------------------------------------------------------"
                     echo "INFO: Starting Stage: Deploy to Production (Minikube)"
                     
-                    def releaseTag = "v1.0.${env.APP_VERSION}" // As defined in Release stage
-                    def k8sManifestPath = "k8s"
-                    def dockerHubUser = env.DOCKERHUB_USER // From global environment
+                    def releaseTag = "v1.0.${env.APP_VERSION}"
+                    def k8sManifestPath = "k8s" // Directory containing your YAML files
+                    def kubeconfigCredentialsId = 'kubeconfig-credentials' // The ID you set in Jenkins Credentials
 
-                    // Target images based on base names (assuming IMAGE_PREFIX was like localhost/basename)
-                    def mysqlImageBaseName = env.MYSQL_APP_IMAGE_BASE_NAME
-                    def phpImageBaseName   = env.PHP_APP_IMAGE_BASE_NAME
-                    def apacheImageBaseName= env.APACHE_APP_IMAGE_BASE_NAME
+                    // Use withCredentials to securely access the kubeconfig file
+                    withCredentials([file(credentialsId: kubeconfigCredentialsId, variable: 'KUBECONFIG_FILE_PATH')]) {
+                        // KUBECONFIG_FILE_PATH is now a temporary path to your kubeconfig file.
+                        // We'll set the KUBECONFIG environment variable for the shell commands.
+                        env.KUBECONFIG = KUBECONFIG_FILE_PATH
 
-                    echo "INFO: Updating image tags in Kubernetes manifests to: ${releaseTag}"
+                        echo "INFO: Using Kubeconfig: ${env.KUBECONFIG}"
+                        echo "INFO: Applying Kubernetes manifests from '${k8sManifestPath}' directory..."
 
-                    // Use sed to update the image tag in each YAML file.
-                    // This assumes your YAML files have an 'image:' line that includes the Docker Hub user and base image name.
-                    // Example: image: yourdockerhubusername/s753-t73-mysql:some-old-tag
-                    // The '.*' will match any existing tag on that line.
-                    
-                    sh """
-                        sed -i 's|image: ${dockerHubUser}/${mysqlImageBaseName}:.*|image: ${dockerHubUser}/${mysqlImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/mysql-prod.yaml
-                        sed -i 's|image: ${dockerHubUser}/${phpImageBaseName}:.*|image: ${dockerHubUser}/${phpImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/php-prod.yaml
-                        sed -i 's|image: ${dockerHubUser}/${apacheImageBaseName}:.*|image: ${dockerHubUser}/${apacheImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/apache-prod.yaml
-                    """
+                        // The sed commands to update image tags in your YAML files should also be within this
+                        // withCredentials block if you are checking out fresh each time or need to ensure
+                        // kubectl uses the correct config.
+                        // For example (ensure these sed commands are correct for your YAML structure):
+                        def dockerHubUser = env.DOCKERHUB_USER
+                        def mysqlImageBaseName = env.MYSQL_APP_IMAGE_BASE_NAME
+                        def phpImageBaseName   = env.PHP_APP_IMAGE_BASE_NAME
+                        def apacheImageBaseName= env.APACHE_APP_IMAGE_BASE_NAME
 
-                    echo "INFO: Applying Kubernetes manifests from ${k8sManifestPath} directory..."
-                    try {
-                        sh "kubectl create namespace ${env.PROD_K8S_NAMESPACE} || echo 'INFO: Namespace ${env.PROD_K8S_NAMESPACE} already exists or error.'"
-                        
-                        sh "kubectl apply -f ${k8sManifestPath}/mysql-prod.yaml --namespace=${env.PROD_K8S_NAMESPACE}"
-                        sh "kubectl apply -f ${k8sManifestPath}/php-prod.yaml --namespace=${env.PROD_K8S_NAMESPACE}"
-                        sh "kubectl apply -f ${k8sManifestPath}/apache-prod.yaml --namespace=${env.PROD_K8S_NAMESPACE}"
+                        sh """
+                            echo "INFO: Updating image tags in Kubernetes manifests to: ${releaseTag}"
+                            sed -i 's|image: ${dockerHubUser}/${mysqlImageBaseName}:.*|image: ${dockerHubUser}/${mysqlImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/mysql-prod.yaml
+                            sed -i 's|image: ${dockerHubUser}/${phpImageBaseName}:.*|image: ${dockerHubUser}/${phpImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/php-prod.yaml
+                            sed -i 's|image: ${dockerHubUser}/${apacheImageBaseName}:.*|image: ${dockerHubUser}/${apacheImageBaseName}:${releaseTag}|g' ${k8sManifestPath}/apache-prod.yaml
+                        """
 
-                        echo "INFO: Waiting for deployments to roll out..."
-                        sh "kubectl rollout status deployment/s753-mysql-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
-                        sh "kubectl rollout status deployment/s753-php-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
-                        sh "kubectl rollout status deployment/s753-apache-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
-                        
-                        // ... rest of the stage ...
-                    } catch (Exception e) {
-                        echo "ERROR: Deploy to Production (Minikube) failed: ${e.getMessage()}"
-                        currentBuild.result = 'FAILURE'; error "Deploy to Production (Minikube) failed."
-                    }
+                        sh label: 'Deploy to Minikube K8s', script: """
+                            set -e 
+                            # The KUBECONFIG environment variable set by Groovy (env.KUBECONFIG)
+                            # will be available to this shell script.
+
+                            echo "INFO: Verifying kubectl connection to cluster using KUBECONFIG='${KUBECONFIG}'..."
+                            kubectl cluster-info
+                            kubectl version --short || echo "WARN: kubectl version --short failed, but continuing..."
+
+                            echo "INFO: Creating namespace '${env.PROD_K8S_NAMESPACE}' if it doesn't exist..."
+                            kubectl create namespace "${env.PROD_K8S_NAMESPACE}" || echo "INFO: Namespace '${env.PROD_K8S_NAMESPACE}' already exists or error creating."
+                            
+                            echo "INFO: Applying MySQL manifest..."
+                            kubectl apply -f "${k8sManifestPath}/mysql-prod.yaml" --namespace="${env.PROD_K8S_NAMESPACE}"
+                            echo "INFO: Applying PHP manifest..."
+                            kubectl apply -f "${k8sManifestPath}/php-prod.yaml" --namespace="${env.PROD_K8S_NAMESPACE}"
+                            echo "INFO: Applying Apache manifest..."
+                            kubectl apply -f "${k8sManifestPath}/apache-prod.yaml" --namespace="${env.PROD_K8S_NAMESPACE}"
+
+                            echo "INFO: Waiting for deployments to roll out..."
+                            kubectl rollout status deployment/s753-mysql-prod-deployment --namespace="${env.PROD_K8S_NAMESPACE}" --timeout=180s
+                            kubectl rollout status deployment/s753-php-prod-deployment --namespace="${env.PROD_K8S_NAMESPACE}" --timeout=180s
+                            kubectl rollout status deployment/s753-apache-prod-deployment --namespace="${env.PROD_K8S_NAMESPACE}" --timeout=180s
+                            
+                            echo "SUCCESS: Production environment deployed to Minikube namespace '${env.PROD_K8S_NAMESPACE}'."
+                            # ...
+                        """
+                    } // End of withCredentials
                     echo "-------------------------------------------------------------------"
                 }
             }
         }
+// ... (rest of your Jenkinsfile)
 
 
     } // End of stages
