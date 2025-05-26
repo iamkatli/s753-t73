@@ -398,8 +398,91 @@ pipeline {
                 }
             }
         }
-// ... (rest of your Jenkinsfile)
 
+        stage('Monitoring & Alerting (Health Check on Prod)') {
+            steps {
+                script {
+                    echo "-------------------------------------------------------------------"
+                    echo "INFO: Starting Stage: Monitoring & Alerting (Health Check on Prod)"
+                    
+                    // These environment variables should be defined in your global environment block
+                    // env.PROD_APACHE_K8S_SVC_NAME = "s753-apache-prod-svc"
+                    // env.PROD_K8S_NAMESPACE = "s753-production"
+
+                    def minikubeIp = ''
+                    def nodePort = ''
+                    def prodAppUrl = ''
+                    def healthCheckUrl = ''
+                    boolean healthy = false
+
+                    try {
+                        echo "INFO: Determining Production URL from Minikube..."
+                        minikubeIp = sh(script: "minikube ip", returnStdout: true).trim()
+                        nodePort = sh(script: "kubectl get svc ${env.PROD_APACHE_K8S_SVC_NAME} --namespace=${env.PROD_K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}'", returnStdout: true).trim()
+                        
+                        if (!minikubeIp || minikubeIp.isEmpty() || !nodePort || nodePort.isEmpty()) {
+                            error "ERROR: Could not determine Minikube IP or NodePort for health check."
+                        }
+
+                        prodAppUrl = "http://${minikubeIp}:${nodePort}"
+                        healthCheckUrl = "${prodAppUrl}/healthcheck.php"
+                        echo "INFO: Production Health Check URL: ${healthCheckUrl}"
+
+                        // Perform the health check
+                        sh """
+                            set -e  # Exit on error
+                            echo "INFO: Checking PRODUCTION health at: ${healthCheckUrl}"
+                            
+                            # Attempt to curl the health check endpoint.
+                            # Save HTTP status code and body separately.
+                            HTTP_CODE=\$(curl -s -L -w "%{http_code}" "${healthCheckUrl}" -o health_check_response.json)
+                            
+                            echo "INFO: Health check HTTP status code: \${HTTP_CODE}"
+                            echo "INFO: Health check response body:"
+                            cat health_check_response.json || echo "WARN: health_check_response.json not found or empty."
+
+                            if [ "\${HTTP_CODE}" -eq "200" ]; then
+                                echo "SUCCESS: PRODUCTION Health check endpoint returned HTTP 200."
+                                # Check if the JSON response body contains '"status": "OK"'
+                                if grep -q '"status": "OK"' health_check_response.json; then
+                                    echo "SUCCESS: PRODUCTION Application is healthy (found 'status: OK')."
+                                    # If you want to mark healthy here, you could use a marker file or env var for groovy
+                                else
+                                    echo "ERROR: PRODUCTION Application is NOT healthy (content mismatch: 'status: OK' not found)."
+                                    exit 1 # Fail the shell script, hence the stage
+                                fi
+                            else
+                                echo "ERROR: PRODUCTION Health check endpoint returned HTTP \${HTTP_CODE}. Expected 200."
+                                exit 1 # Fail the shell script, hence the stage
+                            fi
+                        """
+                        // If sh script exits with 0, it means health check passed
+                        healthy = true 
+                        echo "SUCCESS: Production health check passed."
+
+                    } catch (Exception e) {
+                        // This catch block will catch failures from 'error' step or sh step if it fails Jenkins build
+                        echo "ERROR: Monitoring stage failed during execution: ${e.getMessage()}"
+                        // currentBuild.result is already set to FAILURE by 'error' or failed sh step
+                    } finally {
+                        sh "rm -f health_check_response.json || true" // Clean up temp file
+                        if (!healthy) {
+                             // Ensure build is marked as failure if any check logically failed but didn't exit script
+                            if (currentBuild.result == null || currentBuild.result == 'SUCCESS') {
+                                currentBuild.result = 'FAILURE'
+                            }
+                            // The 'error' call inside the sh block would have already stopped it.
+                            // This is a fallback if the shell script logic for exit 1 had an issue.
+                        }
+                    }
+                    
+                    if (!healthy) {
+                         error "ALERT: PRODUCTION Environment Health Check FAILED!" // This will ensure pipeline stops and fails
+                    }
+                    echo "-------------------------------------------------------------------"
+                }
+            }
+        }
 
     } // End of stages
 
