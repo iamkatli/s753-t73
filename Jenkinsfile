@@ -67,7 +67,7 @@ pipeline {
                     if (buildSuccess) {
                         echo "INFO: Building Apache image: ${apacheImageFullName}..."
                         try {
-                            sh "(docker build -t \"${apacheImageFullName}\" apache/Dockerfile .)"
+                            sh "(docker build -t \"${apacheImageFullName}\" -f apache/Dockerfile .)"
                             echo "SUCCESS: Apache Docker image built."
                         } catch (Exception e) {
                             echo "ERROR: Apache Docker image build FAILED: ${e.getMessage()}"
