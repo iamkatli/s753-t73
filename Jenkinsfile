@@ -198,7 +198,7 @@ pipeline {
 
         stage('Automated Tests (Smoke Test on Test Env)') {
             environment {
-                // Make sure TEST_APACHE_EXPOSED_PORT is accessible here, it is from global env.
+                // Make sure TEST_APACHE_EXPOSED_PORT is accessible here, it is from global env...
                 TARGET_APP_URL = "http://localhost:${env.TEST_APACHE_EXPOSED_PORT}"
             }
             steps {
