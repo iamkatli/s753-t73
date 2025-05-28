@@ -188,7 +188,7 @@ pipeline {
                         echo "INFO: TEST Apache container started."
                         
                         echo "SUCCESS: Test environment deployed!"
-                        echo "Test application accessible at: http://localhost:${env.TEST_APACHE_EXPOSED_PORT}"
+                        echo "Test application accessible at: http://emp-test.abc.com:${env.TEST_APACHE_EXPOSED_PORT}"
                         docker ps --filter network="${env.TEST_NETWORK_NAME}"
                     """
                     echo "-------------------------------------------------------------------"
@@ -199,7 +199,7 @@ pipeline {
         stage('Automated Tests (Smoke Test on Test Env)') {
             environment {
                 // Make sure TEST_APACHE_EXPOSED_PORT is accessible here, it is from global env...
-                TARGET_APP_URL = "http://localhost:${env.TEST_APACHE_EXPOSED_PORT}"
+                TARGET_APP_URL = "http://emp-test.abc.com:${env.TEST_APACHE_EXPOSED_PORT}"
             }
             steps {
                 script {
