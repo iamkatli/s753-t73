@@ -288,7 +288,7 @@ pipeline {
                                        <p>A manual security review and approval is needed to allow the pipeline to proceed to the Release stage.</p>
                                        <hr>
                                        <p><b>SonarQube Report:</b> <a href="${env.SONAR_HOST_URL_ENV}/dashboard?id=${env.SONAR_PROJECT_KEY}">${env.SONAR_HOST_URL_ENV}/dashboard?id=${env.SONAR_PROJECT_KEY}</a></p>
-                                       <p><b>Approve/Abort in Jenkins:</b> <a href="${env.BUILD_URL}input/securityApproval/">${env.BUILD_URL}input/securityApproval/</a></p>
+                                       <p><b>Approve/Abort in Jenkins:</b> <a href="${env.BUILD_URL}input/">${env.BUILD_URL}input/</a></p>
                                        <hr>
                                        <p>Thank you.</p>""",
                             mimeType: 'text/html' // Allows HTML content in the email
