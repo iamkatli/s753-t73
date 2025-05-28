@@ -535,13 +535,13 @@ pipeline {
                             --namespace "${env.PROMETHEUS_NAMESPACE}" \\
                             --create-namespace \\
                             --set server.service.type=NodePort \\
-                            --set server.service.nodePort=${env.PROMETHEUS_NODE_PORT}
-                            --set alertmanager.enabled=false \\       # Optional: Disable Alertmanager for simplicity
-                            --set pushgateway.enabled=false \\      # Optional: Disable Pushgateway for simplicity
-                            --set kubeStateMetrics.enabled=true \\  # Keep kube-state-metrics
-                            --set nodeExporter.enabled=true \\      # Keep node-exporter
+                            --set server.service.nodePort=${env.PROMETHEUS_NODE_PORT} \\
+                            --set alertmanager.enabled=false \\
+                            --set pushgateway.enabled=false \\
+                            --set kubeStateMetrics.enabled=true \\
+                            --set nodeExporter.enabled=true \\
                             --wait \\
-                            --timeout 6m0s # Adjust timeout as needed
+                            --timeout 6m0s 
 
                         echo "INFO: Prometheus Helm chart deployment attempt complete."
                         echo "INFO: Prometheus server should be accessible via NodePort."
