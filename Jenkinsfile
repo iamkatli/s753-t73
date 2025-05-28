@@ -278,7 +278,7 @@ pipeline {
                     echo "INFO: Starting Stage: Security Analysis & Approval"
                     echo "INFO: SonarQube scan completed. Review dashboard: ${env.SONAR_HOST_URL_ENV}/dashboard?id=${env.SONAR_PROJECT_KEY}"
 
-                    // Send email notification for pending approval
+                    // Send email notification for pending approval.
                     try {
                         emailext (
                             to: 'katalinali@gmail.com', // <<< *** REPLACE THIS with the actual approver's email ***
