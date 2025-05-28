@@ -277,8 +277,31 @@ pipeline {
                     echo "-------------------------------------------------------------------"
                     echo "INFO: Starting Stage: Security Analysis & Approval"
                     echo "INFO: SonarQube scan completed. Review dashboard: ${env.SONAR_HOST_URL_ENV}/dashboard?id=${env.SONAR_PROJECT_KEY}"
+
+                    // Send email notification for pending approval
                     try {
-                        timeout(time: 1, unit: 'HOURS') { 
+                        emailext (
+                            to: 'katalinali@gmail.com', // <<< *** REPLACE THIS with the actual approver's email ***
+                            subject: "Jenkins [${env.JOB_NAME}] - Build #${env.BUILD_NUMBER}: Security Review Required",
+                            body: """<p>Hello Approver,</p>
+                                       <p>The SonarQube security scan for Jenkins job <b>${env.JOB_NAME}</b>, build <b>#${env.BUILD_NUMBER}</b> has completed and requires your review.</p>
+                                       <p>A manual security review and approval is needed to allow the pipeline to proceed to the Release stage.</p>
+                                       <hr>
+                                       <p><b>SonarQube Report:</b> <a href="${env.SONAR_HOST_URL_ENV}/dashboard?id=${env.SONAR_PROJECT_KEY}">${env.SONAR_HOST_URL_ENV}/dashboard?id=${env.SONAR_PROJECT_KEY}</a></p>
+                                       <p><b>Approve/Abort in Jenkins:</b> <a href="${env.BUILD_URL}input/securityApproval/">${env.BUILD_URL}input/securityApproval/</a></p>
+                                       <hr>
+                                       <p>Thank you.</p>""",
+                            mimeType: 'text/html' // Allows HTML content in the email
+                        )
+                        echo "INFO: Approval notification email sent successfully."
+                    } catch (Exception e) {
+                        echo "WARN: Failed to send approval notification email. Please check Jenkins email configuration and plugin. Error: ${e.getMessage()}"
+                        // Optionally, you could choose to not fail the pipeline here, allowing the input step to still proceed.
+                        // If email is critical, you could re-throw the error or set currentBuild.result.
+                    }
+
+                    try {
+                        timeout(time: 4, unit: 'HOURS') { 
                             input(
                                 id: 'securityApproval', 
                                 message: "Security Review Gate: Check SonarQube (${env.SONAR_HOST_URL_ENV}/dashboard?id=${env.SONAR_PROJECT_KEY}). Approve to continue to Release?",
@@ -510,6 +533,7 @@ pipeline {
                         # Test with webhook
                         helm upgrade --install "${env.PROMETHEUS_RELEASE_NAME}" prometheus-community/prometheus \\
                             --namespace "${env.PROMETHEUS_NAMESPACE}" \\
+                            --create-namespace \\
                             --set server.service.type=NodePort \\
                             --set server.service.nodePort=${env.PROMETHEUS_NODE_PORT}
 
