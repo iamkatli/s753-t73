@@ -5,124 +5,49 @@ Containerizing PHP,Apache and MySQL
 The project structure is as follows :
 
 ```
-/php-apache-mysql/
+.
 ├── apache
 │   ├── apache_php.conf
 │   └── Dockerfile
 ├── docker-compose.yml
+├── Jenkinsfile
+├── k8s
+│   ├── apache-prod.yaml
+│   ├── mysql-prod.yaml
+│   └── php-prod.yaml
+├── mysql
+│   ├── Dockerfile
+│   └── dump.sql
 ├── php
 │   └── Dockerfile
 ├── public
 │   ├── config.php
 │   ├── create.php
 │   ├── delete.php
-│   ├── dump
-│   │   └── dump.sql
 │   ├── employee.php
 │   ├── error.php
+│   ├── healthcheck.php
 │   ├── index.php
 │   ├── logout.php
 │   ├── read.php
 │   └── update.php
-└── README.md
+├── README.md
+└── sonar-project.properties
 
 ```
 
-Once this structure is replicated or cloned(using "git clone https://github.com/iamkatli/s753-t74 (fork from https://github.com/yogesh174/docker-project") with these files, Docker and Docker compose is installed locally, you can simply run "docker-compose up" from the root of the project to run this project, and point your browser to http://localhost:8080 to see the project running.
+You can run "docker-compose up" from the root of the project to run this project, and point your browser to http://localhost:8080 to see the project running.
 
 ### Docker Compose
 
 Docker compose allows us to define the dependencies for the services, networks, volumes, etc as code.
 
-#### docker-compose.yml
-```
-vservices:
-  php:
-    build: './php/'
-    volumes:
-      - ./public:/var/www/html/
-  apache:
-    build: './apache/'
-    depends_on:
-      - php
-      - mysql
-    ports:
-      - "8080:80"
-    volumes:
-      - ./public:/var/www/html/
-  mysql:
-    image: mysql:8.0
-    restart: always
-    ports:
-      - "3306:3306"
-    volumes:
-      - db_data:/var/lib/mysql
-      # Initially creates employees table
-      - ./public/dump:/docker-entrypoint-initdb.d/
-    environment:
-      MYSQL_ROOT_PASSWORD: "password"
-      MYSQL_DATABASE: "mydb"
-      MYSQL_USER: "admin"
-      MYSQL_PASSWORD: "password"
-    command: --default-authentication-plugin=mysql_native_password
-volumes:
-    db_data:
-```
-
-Here we are decoupling Apache, PHP and Mysql by building them out into separate containers.We will be using the below Dockerfiles to decouple them : 
-
-#### apache/Dockerfile
-```
-FROM httpd:2.4.33-alpine
-
-RUN apk update; \
-    apk upgrade;
-
-COPY apache_php.conf /usr/local/apache2/conf/apache_php.conf
-RUN echo "Include /usr/local/apache2/conf/apache_php.conf" \
-    >> /usr/local/apache2/conf/httpd.conf
-```
-
-#### php/Dockerfile
-```
-FROM php:7.2.7-fpm-alpine3.7
-
-RUN apk update; \
-    apk upgrade;
-
-RUN docker-php-ext-install mysqli
-```
 
 ### Networking
 
 We're going to have Apache proxy connections which require PHP rendering to port 9000 of our PHP container, and then have the PHP container serve those out as rendered HTML.
 
 We need an apache vhost configuration file that is set up to proxy these requests for PHP files to the PHP container. So in the Dockerfile for Apache we have defined above, we add this file and then include it in the base httpd.conf file. This is for the proxying which allows us to decouple Apache and PHP. Here we called it apache_php.conf and we have the proxying modules defined as well as the VirtualHost.
-
-#### apache/apache_php.conf
-```
-ServerName localhost
-
-LoadModule deflate_module /usr/local/apache2/modules/mod_deflate.so
-LoadModule proxy_module /usr/local/apache2/modules/mod_proxy.so
-LoadModule proxy_fcgi_module /usr/local/apache2/modules/mod_proxy_fcgi.so
-
-<VirtualHost *:80>
-    # Proxy .php requests to port 9000 of the php-fpm container
-    ProxyPassMatch ^/(.*\.php(/.*)?)$ fcgi://php:9000/var/www/html/$1
-    DocumentRoot /var/www/html/
-    <Directory /var/www/html/>
-        DirectoryIndex index.php
-        Options Indexes FollowSymLinks
-        AllowOverride All
-        Require all granted
-    </Directory>
-    
-    # Send apache logs to stdout and stderr
-    CustomLog /proc/self/fd/1 common
-    ErrorLog /proc/self/fd/2
-</VirtualHost>
-```
 
 ### Volumes
 
