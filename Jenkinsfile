@@ -1,4 +1,4 @@
-// Jenkinsfile (Declarative Pipeline)
+
 
 pipeline {
     agent any
@@ -19,37 +19,37 @@ pipeline {
         TEST_NETWORK_NAME          = "s753-test-network"
         TEST_MYSQL_CONTAINER_NAME  = "s753-test-mysql"         // Specific MySQL container name for test
         TEST_PHP_FPM_SERVICE_NAME  = "php-fpm-service"         // Generic name PHP container will take in test, matches Apache conf
-        TEST_APACHE_CONTAINER_NAME = "s753-test-apache"
+        TEST_APACHE_CONTAINER_NAME = "s753-test-apache"        // Specific apache container name for test
         TEST_APACHE_EXPOSED_PORT   = "8080"
         // DB Connection Vars for Test PHP Container
-        TEST_DB_HOSTNAME           = "${TEST_MYSQL_CONTAINER_NAME}" // PHP in test connects to this
+        TEST_DB_HOSTNAME           = "${TEST_MYSQL_CONTAINER_NAME}" // PHP in test site
         TEST_DB_USERNAME           = "admin"
         TEST_DB_PASSWORD           = "password"
         TEST_DB_NAME               = "mydb"
 
         // --- Production Environment K8s (Minikube) Vars ---
-        PROD_K8S_NAMESPACE         = "s753-production"        // Optional: Deploy to a specific K8s namespace
+        PROD_K8S_NAMESPACE         = "s753-production"        // Deploy to a specific K8s namespace
         PROD_MYSQL_K8S_SVC_NAME    = "mysql-prod-svc"         // K8s Service name for MySQL in Prod
-        PROD_PHP_FPM_K8S_SVC_NAME  = "php-fpm-service"        // K8s Service name for PHP in Prod (matches Apache conf)
+        PROD_PHP_FPM_K8S_SVC_NAME  = "php-fpm-service"        // K8s Service name for PHP in Prod 
         PROD_APACHE_K8S_SVC_NAME   = "s753-apache-prod-svc"
-        PROD_APACHE_NODE_PORT      = "30080"                  // Example NodePort for K8s Apache service
+        PROD_APACHE_NODE_PORT      = "30080"                  // NodePort for K8s Apache service
         // DB Connection Vars for Production PHP Pods (via K8s Deployment env vars)
         PROD_DB_HOSTNAME           = "${PROD_MYSQL_K8S_SVC_NAME}"  // PHP in prod connects to this K8s service
-        PROD_DB_USERNAME           = "prod_admin"             // Example: use different creds for prod
-        PROD_DB_PASSWORD           = "prod_secure_password"   // Store in K8s Secrets in a real scenario!
-        PROD_DB_NAME               = "mydb_production"        // Example: different DB name for prod
+        PROD_DB_USERNAME           = "admin"
+        PROD_DB_PASSWORD           = "password"
+        PROD_DB_NAME               = "mydb"
         
         // --- Shared MySQL Root Password (for initial MySQL container setup in both envs) ---
         DB_ROOT_PASSWORD           = "password" 
 
         // --- Smoke Test Vars ---
-        EXPECTED_TEXT              = "Login Page of ABC Portal" // From your index.php
+        EXPECTED_TEXT              = "Login Page of ABC Portal" // From index.php
 
         // --- Code Quality Stage Vars ---
         SONAR_SERVER               = "10.119.10.137"
         SONAR_EXPOSED_PORT         = "9002"
         SONAR_HOST_URL_ENV         = "http://${SONAR_SERVER}:${SONAR_EXPOSED_PORT}"
-        SONAR_PROJECT_KEY          = "s753-t73" // Should match your sonar-project.properties
+        SONAR_PROJECT_KEY          = "s753-t73" // match sonar-project.properties
         SONAR_TOKEN_ENV            = "sqa_1bff1a3237a77b40451a377f0f59c30443dcadc7"
 
         // --- Release Stage Vars ---
@@ -86,8 +86,7 @@ pipeline {
 
                     echo "INFO: Building PHP image: ${phpImageFullName}..."
                     try {
-                        // IMPORTANT: Your php/Dockerfile COPY command needs to be relative to project root,
-                        // e.g., COPY php/public /var/www/html/ (since build context is '.')
+
                         sh "docker build -t \"${phpImageFullName}\" -f php/Dockerfile ."
                         echo "SUCCESS: PHP Docker image built."
                     } catch (Exception e) {
@@ -98,9 +97,7 @@ pipeline {
                     if (buildSuccess) {
                         echo "INFO: Building Apache image: ${apacheImageFullName}..."
                         try {
-                            // IMPORTANT: Your apache/Dockerfile COPY command needs to be relative to project root,
-                            // e.g., COPY php/public /var/www/html/ (if DocumentRoot is /var/www/html)
-                            // AND COPY apache/apache_php.conf /usr/local/apache2/conf/apache_php.conf
+
                             sh "docker build -t \"${apacheImageFullName}\" -f apache/Dockerfile ."
                             echo "SUCCESS: Apache Docker image built."
                         } catch (Exception e) {
@@ -112,7 +109,7 @@ pipeline {
                     if (buildSuccess) {
                         echo "INFO: Building MySQL image: ${mysqlImageFullName}..."
                         try {
-                            // This build context is 'mysql/', so COPY dump.sql in mysql/Dockerfile is fine.
+
                             sh "(cd mysql && docker build -t \"${mysqlImageFullName}\" .)"
                             echo "SUCCESS: MySQL Docker image built."
                         } catch (Exception e) {
@@ -144,7 +141,7 @@ pipeline {
                     sh label: 'Deploy Test Services', script: """
                         set -e 
 
-                        echo "INFO: Cleaning up any previous test environment..."
+                        echo "INFO: Cleaning up previous test environment..."
                         docker stop "${env.TEST_APACHE_CONTAINER_NAME}" "${env.TEST_PHP_FPM_SERVICE_NAME}" "${env.TEST_MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
                         docker rm "${env.TEST_APACHE_CONTAINER_NAME}" "${env.TEST_PHP_FPM_SERVICE_NAME}" "${env.TEST_MYSQL_CONTAINER_NAME}" > /dev/null 2>&1 || true
                         echo "INFO: Removing TEST MySQL data volume s753-db-data-test..."
@@ -198,7 +195,7 @@ pipeline {
 
         stage('Automated Tests (Smoke Test on Test Env)') {
             environment {
-                // Make sure TEST_APACHE_EXPOSED_PORT is accessible here, it is from global env...
+
                 TARGET_APP_URL = "http://emp-test.abc.com:${env.TEST_APACHE_EXPOSED_PORT}"
             }
             steps {
@@ -209,7 +206,6 @@ pipeline {
                         set -e
                         EXPECTED_HTTP_CODE="200"
                         TEST_SUCCESS=true
-                        # Use the TARGET_APP_URL from the stage's environment
                         INDEX_PAGE_URL="\${TARGET_APP_URL}/index.php" 
 
                         echo "INFO: Test 1: Checking accessibility of \${INDEX_PAGE_URL}"
@@ -281,7 +277,7 @@ pipeline {
                     // Send email notification for pending approval
                     try {
                         emailext (
-                            to: 'katalinali@gmail.com', // <<< *** REPLACE THIS with the actual approver's email ***
+                            to: 'katalinali@gmail.com', 
                             subject: "Jenkins [${env.JOB_NAME}] - Build #${env.BUILD_NUMBER}: Security Review Required",
                             body: """<p>Hello Approver,</p>
                                        <p>The SonarQube security scan for Jenkins job <b>${env.JOB_NAME}</b>, build <b>#${env.BUILD_NUMBER}</b> has completed and requires your review.</p>
@@ -296,8 +292,6 @@ pipeline {
                         echo "INFO: Approval notification email sent successfully."
                     } catch (Exception e) {
                         echo "WARN: Failed to send approval notification email. Please check Jenkins email configuration and plugin. Error: ${e.getMessage()}"
-                        // Optionally, you could choose to not fail the pipeline here, allowing the input step to still proceed.
-                        // If email is critical, you could re-throw the error or set currentBuild.result.
                     }
 
                     try {
@@ -335,7 +329,7 @@ pipeline {
                     def targetMysqlImage  = "${env.DOCKERHUB_USER}/${env.MYSQL_APP_IMAGE_BASE_NAME}:${releaseTag}"
 
                     echo "INFO: Release Tag: ${releaseTag}"
-                    // ... (rest of echo statements)
+
 
                     withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CREDENTIALS_ID, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         try {
@@ -354,9 +348,6 @@ pipeline {
                             sh "docker push \"${targetMysqlImage}\""
                             echo "SUCCESS: Pushed MySQL image."
 
-                            // ... (Git tagging part - ensure Jenkins has push credentials or do it manually)
-                            echo "INFO: Git commit tagging can be added here if Jenkins has Git push credentials."
-
                         } catch (Exception e) {
                             echo "ERROR: Release stage failed: ${e.getMessage()}"
                             currentBuild.result = 'FAILURE'; error "Release stage failed."
@@ -370,9 +361,6 @@ pipeline {
             }
         }
 
-// Jenkinsfile
-// ... (previous stages and environment block) ...
-
         stage('Deploy to Production (Minikube)') {
             steps {
                 script {
@@ -380,22 +368,7 @@ pipeline {
                     echo "INFO: Starting Stage: Deploy to Production (Minikube)"
                     
                     def releaseTag = "v1.0.${env.APP_VERSION}"
-                    def k8sManifestPath = "k8s" // Directory containing your YAML files
-                    //// def kubeconfigCredentialsId = 'kubeconfig-credentials' // The ID you set in Jenkins Credentials
-
-                    // Use withCredentials to securely access the kubeconfig file
-                    //// withCredentials([file(credentialsId: kubeconfigCredentialsId, variable: 'KUBECONFIG_FILE_PATH')]) {
-                        // KUBECONFIG_FILE_PATH is now a temporary path to your kubeconfig file.
-                        // We'll set the KUBECONFIG environment variable for the shell commands.
-                        //// env.KUBECONFIG = KUBECONFIG_FILE_PATH
-
-                        //// echo "INFO: Using Kubeconfig: ${env.KUBECONFIG}"
-                        //// echo "INFO: Applying Kubernetes manifests from '${k8sManifestPath}' directory..."
-
-                        // The sed commands to update image tags in your YAML files should also be within this
-                        // withCredentials block if you are checking out fresh each time or need to ensure
-                        // kubectl uses the correct config.
-                        // For example (ensure these sed commands are correct for your YAML structure):
+                    def k8sManifestPath = "k8s" // Directory containing YAML files
                         def dockerHubUser = env.DOCKERHUB_USER
                         def mysqlImageBaseName = env.MYSQL_APP_IMAGE_BASE_NAME
                         def phpImageBaseName   = env.PHP_APP_IMAGE_BASE_NAME
@@ -422,7 +395,6 @@ pipeline {
                         sh "kubectl rollout status deployment/s753-php-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
                         sh "kubectl rollout status deployment/s753-apache-prod-deployment --namespace=${env.PROD_K8S_NAMESPACE} --timeout=180s"
                         
-                        // ... rest of the stage ...
                 }
             }
         }
@@ -438,16 +410,13 @@ pipeline {
 
                     sh """
                         kubectl cluster-info
-                        echo "INFO: Adding Prometheus Helm community repository if not already added..."
+                        echo "INFO: Adding Prometheus Helm community repository ..."
                         helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || echo "INFO: Prometheus repo may already be added or error occurred (continuing)."
-                        echo "INFO: Adding Prometheus Helm community repository if not already added..."
                         helm repo update
 
                         echo "INFO: Installing or Upgrading Prometheus release '${env.PROMETHEUS_RELEASE_NAME}' in namespace '${env.PROMETHEUS_NAMESPACE}'..."
-                        # --create-namespace will create the namespace if it doesn't exist.
-                        # --wait makes Helm wait until all resources are in a ready state.
-                        # We set server.service.type to NodePort for easier access in Minikube.
-                        # Test with webhook
+                        # --create-namespace will create the namespace if it doesn't exist
+                        # server.service.type to NodePort for easier access in k8s
                         helm upgrade --install "${env.PROMETHEUS_RELEASE_NAME}" prometheus-community/prometheus \\
                             --namespace "${env.PROMETHEUS_NAMESPACE}" \\
                             --create-namespace \\
@@ -461,11 +430,7 @@ pipeline {
                             --timeout 6m0s 
 
                         echo "INFO: Prometheus Helm chart deployment attempt complete."
-                        echo "INFO: Prometheus server should be accessible via NodePort."
-                        echo "INFO: To access Prometheus UI:"
-                        echo "INFO: 1. Get your Minikube IP by running: minikube ip"
-                        echo "INFO: 2. Open your browser to: http://<Minikube_IP>:${env.PROMETHEUS_NODE_PORT}"
-                        echo "INFO: It might take a few moments for all Prometheus components to be fully ready and accessible."
+                        echo "INFO: Open browser to: http://<Minikube_IP>:${env.PROMETHEUS_NODE_PORT}"
                     """
 
                     echo "-------------------------------------------------------------------"
@@ -483,7 +448,7 @@ pipeline {
                     def nodePort = ''
                     def prodAppUrl = ''
                     def healthCheckUrl = ''
-                    boolean isHealthy = false // Assume unhealthy until proven otherwise
+                    boolean isHealthy = false // Assume unhealthy first
                     String healthCheckLogDetails = "Health check did not fully complete or an error occurred before validation." // Default message
 
                     try {
@@ -494,14 +459,13 @@ pipeline {
                         if (!minikubeIp || minikubeIp.isEmpty() || !nodePort || nodePort.isEmpty()) {
                             healthCheckLogDetails = "ERROR: Could not determine Minikube IP or NodePort for health check."
                             // Let this fall through to the 'if (!isHealthy)' block to send a failure email and fail the stage
-                            // but don't call 'error' here yet, so email sending logic is reached.
+
                         } else {
                             prodAppUrl = "http://${minikubeIp}:${nodePort}"
                             healthCheckUrl = "${prodAppUrl}/healthcheck.php"
                             echo "INFO: Production Health Check URL: ${healthCheckUrl}"
 
                             // Perform the health check. Capture status and full output.
-                            // The sh step will set currentBuild.result to FAILURE if it exits non-zero due to set -e
                             def healthCheckShellOutput = ""
                             try {
                                 healthCheckShellOutput = sh(
@@ -534,7 +498,7 @@ pipeline {
                                     returnStdout: true // Capture all stdout from the script
                                 ).trim()
                                 
-                                // If the shell script completed without Jenkins 'sh' step throwing an exception (due to non-zero exit code)
+                                // If the shell script completed without Jenkins 'sh' step throwing an exception (non-zero exit code)
                                 // it means it exited with 0.
                                 if (healthCheckShellOutput.contains("HEALTH_CHECK_OVERALL_STATUS:SUCCESS")) {
                                     isHealthy = true
@@ -542,14 +506,14 @@ pipeline {
                                 healthCheckLogDetails = "Health check script executed.\n\nFull Output:\n${healthCheckShellOutput}"
 
                             } catch (Exception scriptEx) {
-                                // This means the sh script itself failed (returned non-zero and Jenkins caught it)
+                                // This means the sh script itself failed (return non-zero and Jenkins caught it)
                                 echo "ERROR: Health check script execution failed: ${scriptEx.getMessage()}"
                                 healthCheckLogDetails = "Health check script execution FAILED.\n\nScript Output (if any before failure):\n${healthCheckShellOutput}\n\nException:\n${scriptEx.getMessage()}"
                                 isHealthy = false 
                             }
                         }
                     } catch (Exception e) {
-                        // This catch block is for initial errors like minikube IP/port not found
+                        // Initial errors of minikube IP/port not found
                         echo "ERROR: Monitoring stage encountered an initial error: ${e.getMessage()}"
                         healthCheckLogDetails = "Monitoring stage failed with an exception before health check script: ${e.getMessage()}"
                         isHealthy = false
@@ -557,7 +521,7 @@ pipeline {
                         sh "rm -f health_check_response.json || true" // Clean up temp file
                     }
                     
-                    // --- Send Email Notification (Success or Failure) ---
+                    // Send Email Notification (Success or Failure)
                     def emailSubject = ""
                     def emailBody = ""
 
@@ -593,7 +557,7 @@ pipeline {
                         echo "WARN: Failed to send deployment status email. Error: ${mailEx.getMessage()}"
                     }
                     
-                    // Finally, if not healthy, ensure the pipeline is marked as failed.
+                    // if not healthy, the pipeline is marked as failed.
                     if (!isHealthy) {
                         error "ALERT: PRODUCTION Deployment FAILED or Health Check FAILED! (Details in log and email)" 
                     }
@@ -602,7 +566,7 @@ pipeline {
             }
         }
 
-    } // End of stages
+    }
 
 
 }
