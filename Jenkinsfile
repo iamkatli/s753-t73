@@ -483,107 +483,124 @@ pipeline {
                     def nodePort = ''
                     def prodAppUrl = ''
                     def healthCheckUrl = ''
-                    boolean isHealthy = false // Initialize to false, will be set to true only if all checks pass
+                    boolean isHealthy = false // Assume unhealthy until proven otherwise
+                    String healthCheckLogDetails = "Health check did not fully complete or an error occurred before validation." // Default message
 
-                    // Ensure kubectl commands use the correct kubeconfig
-                    withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG_FILE_PATH')]) {
-                        env.KUBECONFIG = KUBECONFIG_FILE_PATH
-
-                        try {
-                            echo "INFO: Determining Production URL from Minikube using KUBECONFIG: ${env.KUBECONFIG}"
-                            minikubeIp = sh(script: "minikube ip", returnStdout: true).trim()
-                            nodePort = sh(script: "kubectl get svc ${env.PROD_APACHE_K8S_SVC_NAME} --namespace=${env.PROD_K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}'", returnStdout: true).trim()
-                            
-                            if (!minikubeIp || minikubeIp.isEmpty() || !nodePort || nodePort.isEmpty()) {
-                                // This error will be caught by the outer catch block below
-                                error "ERROR: Could not determine Minikube IP or NodePort for health check."
-                            }
-
+                    try {
+                        echo "INFO: Determining Production URL from Minikube..."
+                        minikubeIp = sh(script: "minikube ip", returnStdout: true).trim()
+                        nodePort = sh(script: "kubectl get svc ${env.PROD_APACHE_K8S_SVC_NAME} --namespace=${env.PROD_K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}'", returnStdout: true).trim()
+                        
+                        if (!minikubeIp || minikubeIp.isEmpty() || !nodePort || nodePort.isEmpty()) {
+                            healthCheckLogDetails = "ERROR: Could not determine Minikube IP or NodePort for health check."
+                            // Let this fall through to the 'if (!isHealthy)' block to send a failure email and fail the stage
+                            // but don't call 'error' here yet, so email sending logic is reached.
+                        } else {
                             prodAppUrl = "http://${minikubeIp}:${nodePort}"
-                            healthCheckUrl = "${prodAppUrl}/healthcheck.php" // Ensure healthcheck.php is in your PHP image
+                            healthCheckUrl = "${prodAppUrl}/healthcheck.php"
                             echo "INFO: Production Health Check URL: ${healthCheckUrl}"
 
-                            // Perform the health check. The sh script will exit with 0 on success, non-zero on failure.
-                            sh label: 'Perform Production Health Check', script: """
-                                set -e  # Exit immediately if any command fails
-                                echo "INFO: Checking PRODUCTION health at: ${healthCheckUrl}"
+                            // Perform the health check. Capture status and full output.
+                            // The sh step will set currentBuild.result to FAILURE if it exits non-zero due to set -e
+                            def healthCheckShellOutput = ""
+                            try {
+                                healthCheckShellOutput = sh(
+                                    label: 'Perform Production Health Check', 
+                                    script: """
+                                        set -e  # Exit immediately if any command fails
+                                        echo "INFO: Checking PRODUCTION health at: ${healthCheckUrl}"
+                                        
+                                        # Save response body to a file, get HTTP code
+                                        HTTP_CODE=\$(curl -s -L -w "%{http_code}" "${healthCheckUrl}" -o health_check_response.json)
+                                        
+                                        echo "HEALTH_CHECK_HTTP_CODE:\${HTTP_CODE}" # For Groovy to parse
+                                        echo "--- Health Check Response Body (health_check_response.json) ---"
+                                        cat health_check_response.json || echo "WARN: health_check_response.json not found or empty."
+                                        echo "--- End of Health Check Response Body ---"
+
+                                        if [ "\${HTTP_CODE}" -eq "200" ]; then
+                                            if grep -q '"status": "OK"' health_check_response.json; then
+                                                echo "HEALTH_CHECK_OVERALL_STATUS:SUCCESS"
+                                                exit 0 # Success
+                                            else
+                                                echo "HEALTH_CHECK_OVERALL_STATUS:FAILURE_CONTENT_MISMATCH"
+                                                exit 1 # Failure
+                                            fi
+                                        else
+                                            echo "HEALTH_CHECK_OVERALL_STATUS:FAILURE_HTTP_CODE"
+                                            exit 1 # Failure
+                                        fi
+                                    """,
+                                    returnStdout: true // Capture all stdout from the script
+                                ).trim()
                                 
-                                # Attempt to curl the health check endpoint.
-                                # Save HTTP status code and body separately.
-                                # Using --connect-timeout and --max-time for curl robustness
-                                HTTP_CODE=\$(curl --connect-timeout 10 --max-time 20 -s -L -w "%{http_code}" "${healthCheckUrl}" -o health_check_response.json)
-                                
-                                echo "INFO: Health check HTTP status code: \${HTTP_CODE}"
-                                echo "INFO: Health check response body (first 20 lines):"
-                                # Using 'cat || true' to prevent script failure if file is empty or missing after a curl error
-                                head -n 20 health_check_response.json || echo "WARN: health_check_response.json not found or empty (likely curl error)."
+                                // If the shell script completed without Jenkins 'sh' step throwing an exception (due to non-zero exit code)
+                                // it means it exited with 0.
+                                if (healthCheckShellOutput.contains("HEALTH_CHECK_OVERALL_STATUS:SUCCESS")) {
+                                    isHealthy = true
+                                }
+                                healthCheckLogDetails = "Health check script executed.\n\nFull Output:\n${healthCheckShellOutput}"
 
-                                if [ "\${HTTP_CODE}" -eq "200" ]; then
-                                    echo "SUCCESS: PRODUCTION Health check endpoint returned HTTP 200."
-                                    # Check if the JSON response body contains '"status": "OK"'
-                                    # Using 'cat ... || true' in case health_check_response.json is empty after HTTP error
-                                    if grep -q '"status": "OK"' health_check_response.json; then
-                                        echo "SUCCESS: PRODUCTION Application is healthy (found 'status: OK')."
-                                        # If all checks pass, script exits with 0 here (due to set -e, last command is echo which is 0)
-                                    else
-                                        echo "ERROR: PRODUCTION Application is NOT healthy (content mismatch: 'status: OK' not found in response)."
-                                        exit 1 # Fail the shell script
-                                    fi
-                                else
-                                    echo "ERROR: PRODUCTION Health check endpoint returned HTTP \${HTTP_CODE}. Expected 200."
-                                    exit 1 # Fail the shell script
-                                fi
-                            """
-                            // If the sh script above completed without error (because of 'set -e' and potential 'exit 1'),
-                            // it means the health check passed.
-                            isHealthy = true
-                            echo "SUCCESS: Production health check passed."
-
-                        } catch (Exception e) {
-                            // This catch block will be entered if:
-                            // 1. 'error' step for URL determination was called.
-                            // 2. The 'sh' step for the health check returned a non-zero exit code (and Jenkins Pipeline caught it).
-                            echo "ERROR: Monitoring stage encountered an issue during health check or setup: ${e.getMessage()}"
-                            // isHealthy remains false, which will trigger the email and failure below
-                        } finally {
-                            sh "rm -f health_check_response.json || true" // Clean up temporary file
+                            } catch (Exception scriptEx) {
+                                // This means the sh script itself failed (returned non-zero and Jenkins caught it)
+                                echo "ERROR: Health check script execution failed: ${scriptEx.getMessage()}"
+                                healthCheckLogDetails = "Health check script execution FAILED.\n\nScript Output (if any before failure):\n${healthCheckShellOutput}\n\nException:\n${scriptEx.getMessage()}"
+                                isHealthy = false 
+                            }
                         }
-                    } // End of withCredentials
+                    } catch (Exception e) {
+                        // This catch block is for initial errors like minikube IP/port not found
+                        echo "ERROR: Monitoring stage encountered an initial error: ${e.getMessage()}"
+                        healthCheckLogDetails = "Monitoring stage failed with an exception before health check script: ${e.getMessage()}"
+                        isHealthy = false
+                    } finally {
+                        sh "rm -f health_check_response.json || true" // Clean up temp file
+                    }
+                    
+                    // --- Send Email Notification (Success or Failure) ---
+                    def emailSubject = ""
+                    def emailBody = ""
 
-                    // If the health check failed (isHealthy is false)
-                    if (!isHealthy) {
-                        def emailRecipient = 'stakeholder-alerts@example.com' // <<< *** REPLACE with actual stakeholder/team email ***
-                        def emailSubject = "ALERT [Jenkins ${env.JOB_NAME}] - Build #${env.BUILD_NUMBER}: PRODUCTION Health Check FAILED!"
-                        def emailBody = """<p><b>CRITICAL ALERT!</b></p>
-                                           <p>The automated health check for the PRODUCTION environment has FAILED for Jenkins job <b>${env.JOB_NAME}</b>, build <b>#${env.BUILD_NUMBER}</b>.</p>
-                                           <p><b>Checked URL:</b> ${healthCheckUrl ?: 'Could not determine URL due to earlier failure.'}</p>
-                                           <p><b>Reason:</b> Please review the Jenkins build logs for specific errors (e.g., HTTP status code, content mismatch, or error messages from the health check script).</p>
-                                           <p><b>Jenkins Build Log:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                                           <p>Please investigate immediately.</p>"""
-                        try {
-                            echo "ALERT: PRODUCTION Environment Health Check FAILED! Sending notification email to ${emailRecipient}..."
-                            emailext (
-                                to: emailRecipient,
-                                subject: emailSubject,
-                                body: emailBody,
-                                mimeType: 'text/html'
-                            )
-                            echo "INFO: Failure notification email sent."
-                        } catch (Exception mailEx) {
-                            echo "WARN: Failed to send FAILURE notification email. Error: ${mailEx.getMessage()}"
-                            // Print stack trace for mail sending failure for debugging
-                            // mailEx.printStackTrace() // Uncomment for detailed mail sending debug
-                        }
-                        // Finally, ensure the pipeline is marked as failed.
-                        error "ALERT: PRODUCTION Environment Health Check FAILED!" 
+                    if (isHealthy) {
+                        emailSubject = "SUCCESS [Jenkins ${env.JOB_NAME}] - Build #${env.BUILD_NUMBER}: PRODUCTION Deployment Healthy"
+                        emailBody = """<p><b>DEPLOYMENT SUCCESSFUL & HEALTHY!</b></p>
+                                       <p>The application deployed to the PRODUCTION environment for Jenkins job <b>${env.JOB_NAME}</b>, build <b>#${env.BUILD_NUMBER}</b>, has passed the health check.</p>
+                                       <p><b>Checked URL:</b> ${healthCheckUrl ?: 'N/A'}</p>
+                                       <p><b>Status:</b> Healthy</p>
+                                       <p><b>Health Check Details:</b></p><pre>${healthCheckLogDetails.replaceAll("\n", "<br>")}</pre>
+                                       <p><b>Jenkins Build Log:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>"""
                     } else {
-                        echo "INFO: Production application is healthy. No alert needed."
+                        emailSubject = "ALERT [Jenkins ${env.JOB_NAME}] - Build #${env.BUILD_NUMBER}: PRODUCTION Deployment FAILED or UNHEALTHY!"
+                        emailBody = """<p><b>CRITICAL ALERT / DEPLOYMENT ISSUE!</b></p>
+                                       <p>The deployment to or health check for the PRODUCTION environment has FAILED for Jenkins job <b>${env.JOB_NAME}</b>, build <b>#${env.BUILD_NUMBER}</b>.</p>
+                                       <p><b>Checked URL:</b> ${healthCheckUrl ?: 'Could not determine URL or check failed before URL was available.'}</p>
+                                       <p><b>Status:</b> UNHEALTHY or DEPLOYMENT FAILED</p>
+                                       <p><b>Failure Details / Health Check Output:</b></p><pre>${healthCheckLogDetails.replaceAll("\n", "<br>")}</pre>
+                                       <p><b>Jenkins Build Log:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                                       <p>Please investigate immediately.</p>"""
+                    }
+
+                    try {
+                        echo "INFO: Sending deployment status email..."
+                        emailext (
+                            to: 'stakeholder.email@example.com', // <<< *** REPLACE with actual stakeholder/team email(s) ***
+                            subject: emailSubject,
+                            body: emailBody,
+                            mimeType: 'text/html'
+                        )
+                        echo "INFO: Deployment status email sent."
+                    } catch (Exception mailEx) {
+                        echo "WARN: Failed to send deployment status email. Error: ${mailEx.getMessage()}"
+                    }
+                    
+                    // Finally, if not healthy, ensure the pipeline is marked as failed.
+                    if (!isHealthy) {
+                        error "ALERT: PRODUCTION Deployment FAILED or Health Check FAILED! (Details in log and email)" 
                     }
                     echo "-------------------------------------------------------------------"
                 }
             }
         }
-
 
     } // End of stages
 
