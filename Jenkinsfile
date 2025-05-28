@@ -583,7 +583,7 @@ pipeline {
                     try {
                         echo "INFO: Sending deployment status email..."
                         emailext (
-                            to: 'stakeholder.email@example.com', // <<< *** REPLACE with actual stakeholder/team email(s) ***
+                            to: 'katalinali@gmail.com', // <<< *** REPLACE with actual stakeholder/team email(s) ***
                             subject: emailSubject,
                             body: emailBody,
                             mimeType: 'text/html'
