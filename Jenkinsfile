@@ -57,7 +57,7 @@ pipeline {
         DOCKERHUB_CREDENTIALS_ID   = "dockerhub-credentials" // Jenkins Credential ID
 
         // --- Monitor Stage Vars ---
-        PROMETHEUS_NAMESPACE    = "monitoring" // Namespace to install Prometheus into 
+        PROMETHEUS_NAMESPACE    = "monitoring" // Namespace to install Prometheus into.
         PROMETHEUS_RELEASE_NAME = "prometheus" // Helm release name
         PROMETHEUS_NODE_PORT    = "30090"      // Host port to access Prometheus UI
     }
@@ -583,7 +583,7 @@ pipeline {
                     try {
                         echo "INFO: Sending deployment status email..."
                         emailext (
-                            to: 'katalinali@gmail.com', // <<< *** REPLACE with actual stakeholder/team email(s) ***
+                            to: 'katalinali@gmail.com',
                             subject: emailSubject,
                             body: emailBody,
                             mimeType: 'text/html'
