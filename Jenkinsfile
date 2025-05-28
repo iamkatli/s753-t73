@@ -57,7 +57,7 @@ pipeline {
         DOCKERHUB_CREDENTIALS_ID   = "dockerhub-credentials" // Jenkins Credential ID
 
         // --- Monitor Stage Vars ---
-        PROMETHEUS_NAMESPACE    = "monitoring" // Namespace to install Prometheus into
+        PROMETHEUS_NAMESPACE    = "monitoring" // Namespace to install Prometheus into 
         PROMETHEUS_RELEASE_NAME = "prometheus" // Helm release name
         PROMETHEUS_NODE_PORT    = "30090"      // Host port to access Prometheus UI
     }
