@@ -12,3 +12,7 @@ CREATE TABLE login (
 
 -- Insert a test user (username: testuser, password: password123)
 INSERT INTO login (username, password) VALUES ('admin', '$2y$10$9G/vPZd/vzH8UBsL2wb3DeR56I46jnZFv7o0JxaJUaTTqgHBsCcnG');
+
+-- Insert a sample employee record
+INSERT INTO employees (id, password) VALUES (1, 'David Shiren', '33 Little Ryrie Street, Geelong VIC', 6900);
+INSERT INTO employees (id, password) VALUES (2, 'Alma Arani', '96 Western Beach Road, Geelong VIC', 8100);
